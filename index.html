@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SOL Carton Size Helper</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <h1 class="app-title">SOL Carton Size Helper</h1>
+        <p id="contextLabel" class="context-line">正在获取当前表和视图…</p>
+      </header>
+
+      <div id="statusLine" class="status-line"></div>
+      <div
+        id="missingFields"
+        class="status-line warning"
+        style="display: none"
+      ></div>
+
+      <section class="controls">
+        <div class="control-group buffer-group">
+          <label class="control-label" for="innerBuffer">余量设置</label>
+          <div class="control-row buffer-row">
+            <div class="buffer-field">
+              <span class="buffer-field-label">Inner Buffer</span>
+              <input
+                id="innerBuffer"
+                class="number-input"
+                type="number"
+                value="0.6"
+                min="0"
+                step="0.1"
+              />
+            </div>
+            <div class="buffer-field">
+              <span class="buffer-field-label">Master Buffer</span>
+              <input
+                id="masterBuffer"
+                class="number-input"
+                type="number"
+                value="1"
+                min="0"
+                step="0.1"
+              />
+            </div>
+            <select id="bufferUnit" class="select-input buffer-unit-select">
+              <option value="cm">cm</option>
+              <option value="inch">inch</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label class="control-label" for="innerMaterial"
+            >Inner Material</label
+          >
+          <select id="innerMaterial" class="select-input">
+            <option value="Box">Box</option>
+            <option value="Poly Bag">Poly Bag</option>
+          </select>
+        </div>
+
+        <label class="checkbox-field">
+          <input id="selectAllCheckbox" type="checkbox" />
+          计算当前视图全部记录
+        </label>
+
+        <button id="calculateButton" class="primary-button">开始计算</button>
+      </section>
+
+      <section class="log-section">
+        <h2 class="section-title">日志</h2>
+        <p id="logPlaceholder" class="log-placeholder">
+          暂无日志，点击“开始计算”查看详细结果。
+        </p>
+        <ul id="logList" class="log-list"></ul>
+      </section>
+    </div>
+
+    <script type="module" src="/src/index.ts"></script>
+  </body>
+</html>
