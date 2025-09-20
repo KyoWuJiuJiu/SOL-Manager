@@ -486,7 +486,12 @@ export async function runCalculation(
           );
         }
       } else {
-        onLog(`${label} 缺少产品重量，净重未更新。`);
+        if (fieldIds.netWeight) {
+          masterUpdates.push(
+            table.setCellValue(fieldIds.netWeight, recordId, null)
+          );
+        }
+        onLog(`${label} 产品重量为空或为 0，净重已清空。`);
       }
 
       if (masterUpdates.length) {

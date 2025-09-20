@@ -4,8 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SOL Carton Size Helper</title>
-    <script type="module" crossorigin src="./assets/index-IXEGM1xT.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-DGhoW8Az.css">
+    <script type="module" crossorigin src="./assets/index-wKeTQ3Ye.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-B6Yjkube.css">
   </head>
   <body>
     <div class="app-shell">
@@ -79,6 +79,23 @@
         </p>
         <ul id="logList" class="log-list"></ul>
       </section>
+    </div>
+
+    <div id="confirmOverlay" class="confirm-overlay" hidden>
+      <div class="confirm-dialog">
+        <h3 class="confirm-title">确认计算全部记录</h3>
+        <p id="confirmMessage" class="confirm-message">
+          未选择任何记录，是否继续计算当前视图的全部记录？
+        </p>
+        <div class="confirm-actions">
+          <button id="confirmCancel" class="confirm-button">
+            取消
+          </button>
+          <button id="confirmOk" class="confirm-button primary">
+            确认
+          </button>
+        </div>
+      </div>
     </div>
 
   </body>

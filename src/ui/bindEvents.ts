@@ -30,6 +30,11 @@ export function bindUIEvents() {
   const $logList = $("#logList");
   const $logPlaceholder = $("#logPlaceholder");
   const $calculateButton = $("#calculateButton");
+  const $confirmOverlay = $("#confirmOverlay");
+  const $confirmMessage = $("#confirmMessage");
+  const $confirmOk = $("#confirmOk");
+  const $confirmCancel = $("#confirmCancel");
+  const confirmOverlayEl = $confirmOverlay.get(0);
 
   let context: PluginContext | null = null;
   let missingFields: string[] = [];
@@ -108,6 +113,40 @@ export function bindUIEvents() {
     }, 200);
   }
 
+  function showConfirmAllRecords(message: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      $confirmMessage.text(message);
+      $confirmOverlay.attr("hidden", false);
+
+      const cleanup = (result: boolean) => {
+        $confirmOverlay.attr("hidden", true);
+        $confirmOk.off("click", onOk);
+        $confirmCancel.off("click", onCancel);
+        $confirmOverlay.off("click", onOverlayClick);
+        $(document).off("keydown", onKeyDown);
+        resolve(result);
+      };
+
+      const onOk = () => cleanup(true);
+      const onCancel = () => cleanup(false);
+      const onOverlayClick = (evt: JQuery.ClickEvent) => {
+        if (evt.target === confirmOverlayEl) {
+          cleanup(false);
+        }
+      };
+      const onKeyDown = (evt: JQuery.KeyDownEvent) => {
+        if (evt.key === "Escape") {
+          cleanup(false);
+        }
+      };
+
+      $confirmOk.one("click", onOk);
+      $confirmCancel.one("click", onCancel);
+      $confirmOverlay.on("click", onOverlayClick);
+      $(document).on("keydown", onKeyDown);
+    });
+  }
+
   async function refreshContext(options: RefreshOptions = {}) {
     const { showLoading = false } = options;
     if (showLoading) {
@@ -184,7 +223,9 @@ export function bindUIEvents() {
         const selectedIds = await context.view.getSelectedRecordIdList();
         const hasSelection = Array.isArray(selectedIds) && selectedIds.some(Boolean);
         if (!hasSelection) {
-          const confirmed = window.confirm("未选择记录，是否计算当前视图全部记录？");
+          const confirmed = await showConfirmAllRecords(
+            "未选择任何记录，是否计算当前视图的全部记录？"
+          );
           if (!confirmed) {
             return;
           }

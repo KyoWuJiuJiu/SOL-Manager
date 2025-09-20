@@ -79,6 +79,23 @@
       </section>
     </div>
 
+    <div id="confirmOverlay" class="confirm-overlay" hidden>
+      <div class="confirm-dialog">
+        <h3 class="confirm-title">确认计算全部记录</h3>
+        <p id="confirmMessage" class="confirm-message">
+          未选择任何记录，是否继续计算当前视图的全部记录？
+        </p>
+        <div class="confirm-actions">
+          <button id="confirmCancel" class="confirm-button">
+            取消
+          </button>
+          <button id="confirmOk" class="confirm-button primary">
+            确认
+          </button>
+        </div>
+      </div>
+    </div>
+
     <script type="module" src="/src/index.ts"></script>
   </body>
 </html>
