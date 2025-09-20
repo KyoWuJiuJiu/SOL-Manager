@@ -177,6 +177,23 @@ export function bindUIEvents() {
       return;
     }
 
+    const forceAll = $("#selectAllCheckbox").prop("checked");
+
+    if (!forceAll) {
+      try {
+        const selectedIds = await context.view.getSelectedRecordIdList();
+        const hasSelection = Array.isArray(selectedIds) && selectedIds.some(Boolean);
+        if (!hasSelection) {
+          const confirmed = window.confirm("未选择记录，是否计算当前视图全部记录？");
+          if (!confirmed) {
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn("获取选中记录失败", err);
+      }
+    }
+
     busy = true;
     $calculateButton.prop("disabled", true).text("计算中…");
     resetLogs();
@@ -185,7 +202,6 @@ export function bindUIEvents() {
     const masterBuffer = parseNumber($("#masterBuffer") as JQuery<HTMLInputElement>);
     const bufferUnit = $("#bufferUnit").val() as BufferUnit;
     const innerMaterial = $("#innerMaterial").val() as InnerMaterial;
-    const forceAll = $("#selectAllCheckbox").prop("checked");
 
     try {
       await runCalculation(context, {

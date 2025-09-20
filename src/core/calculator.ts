@@ -1,6 +1,7 @@
 import { bitable, ToastType } from "@lark-base-open/js-sdk";
 import type { PluginContext } from "./context";
-import { computeBestArrangement } from "./arrangement";
+import type { FieldIds } from "../config/fields";
+import { computeBestArrangement, type ArrangementResult } from "./arrangement";
 import { convertBufferToInches, extractNumber, round } from "../utils/numbers";
 import { logError } from "../utils/logger";
 
@@ -9,6 +10,14 @@ export type InnerMaterial = "Box" | "Poly Bag";
 
 const INNER_BOX_PACKAGING_WEIGHT_G = 100;
 const GRAM_TO_POUND = 0.00220462;
+const LB_TO_KG = 0.4536;
+const INNER_FIELD_KEYS = [
+  "innerWidth",
+  "innerDepth",
+  "innerHeight",
+  "innerWeight",
+] as const;
+type InnerFieldKey = (typeof INNER_FIELD_KEYS)[number];
 
 export interface CalculationOptions {
   forceAll: boolean;
@@ -24,17 +33,56 @@ function isPositive(value: number | null): value is number {
   return value != null && Number.isFinite(value) && value > 0;
 }
 
-function computePackagingWeightLb(innerQty: number, itemWeight: number | null, innerMaterial: InnerMaterial): number | null {
+function computeInnerGrossWeightLb(
+  innerQty: number,
+  itemWeight: number | null,
+  innerMaterial: InnerMaterial
+): number | null {
   if (innerQty <= 0) return null;
-  if (itemWeight == null || !Number.isFinite(itemWeight)) return null;
-  const packagingWeight = innerMaterial === "Poly Bag" ? 0 : INNER_BOX_PACKAGING_WEIGHT_G;
-  const totalGrams = innerQty * itemWeight + packagingWeight;
+  if (!isPositive(itemWeight)) return null;
+  const packagingWeight =
+    innerMaterial === "Poly Bag" ? 0 : INNER_BOX_PACKAGING_WEIGHT_G;
+  const totalGrams = innerQty * (itemWeight as number) + packagingWeight;
   return totalGrams * GRAM_TO_POUND;
 }
 
+function extractTextValue(cellValue: unknown): string | null {
+  if (cellValue == null) return null;
+  if (typeof cellValue === "number" && Number.isFinite(cellValue)) {
+    return String(cellValue);
+  }
+  if (typeof cellValue === "string") {
+    const trimmed = cellValue.trim();
+    return trimmed.length ? trimmed : null;
+  }
+  if (typeof cellValue === "object") {
+    const { text, value } = cellValue as { text?: unknown; value?: unknown };
+    const textCandidate =
+      typeof text === "string"
+        ? text
+        : typeof text === "number" && Number.isFinite(text)
+        ? String(text)
+        : typeof value === "string"
+        ? value
+        : typeof value === "number" && Number.isFinite(value)
+        ? String(value)
+        : null;
+    if (typeof textCandidate === "string") {
+      const trimmed = textCandidate.trim();
+      return trimmed.length ? trimmed : null;
+    }
+  }
+  return null;
+}
 
-function formatRecordLabel(recordId: string, index: number): string {
-  return `#${index + 1} (${recordId})`;
+function formatRecordLabel(
+  recordId: string,
+  index: number,
+  itemCode: string | null
+): string {
+  const display =
+    itemCode && itemCode.trim().length ? itemCode.trim() : recordId;
+  return `#${index + 1} (${display})`;
 }
 
 function normaliseIds(list: (string | undefined)[]): string[] {
@@ -48,16 +96,24 @@ export async function runCalculation(
   const { table, view, fieldIds } = context;
   const {
     forceAll,
-    innerBuffer,
-    innerBufferUnit,
+      innerBuffer,
+      innerBufferUnit,
     masterBuffer,
     masterBufferUnit,
     innerMaterial,
     onLog,
   } = options;
 
-  const innerBufferInches = convertBufferToInches(innerBuffer, innerBufferUnit);
-  const masterBufferInches = convertBufferToInches(masterBuffer, masterBufferUnit);
+  const effectiveInnerBuffer =
+    innerMaterial === "Poly Bag" ? 0 : innerBuffer;
+  const innerBufferInches = convertBufferToInches(
+    effectiveInnerBuffer,
+    innerBufferUnit
+  );
+  const masterBufferInches = convertBufferToInches(
+    masterBuffer,
+    masterBufferUnit
+  );
 
   const selectedIds = normaliseIds(await view.getSelectedRecordIdList());
   let recordIds: string[];
@@ -79,15 +135,61 @@ export async function runCalculation(
 
   let processed = 0;
   for (const [index, recordId] of recordIds.entries()) {
-    const label = formatRecordLabel(recordId, index);
+    let label = formatRecordLabel(recordId, index, null);
     try {
       const record = await table.getRecordById(recordId);
-      const fetchValue = (key: keyof typeof fieldIds): number | null => {
+      const fetchValue = (key: keyof FieldIds): number | null => {
         const fieldId = fieldIds[key];
         if (!fieldId) return null;
         const cellValue = record.fields[fieldId];
         return extractNumber(cellValue);
       };
+
+      const fetchText = (key: keyof FieldIds): string | null => {
+        const fieldId = fieldIds[key];
+        if (!fieldId) return null;
+        const cellValue = record.fields[fieldId];
+        if (Array.isArray(cellValue) && cellValue.length) {
+          const first = cellValue[0];
+          if (typeof first === "object" && first) {
+            const candidate =
+              typeof (first as { text?: unknown }).text === "string"
+                ? (first as { text?: unknown }).text
+                : typeof (first as { text?: unknown }).text === "number" && Number.isFinite((first as { text?: unknown }).text)
+                  ? String((first as { text?: unknown }).text)
+                  : typeof (first as { value?: unknown }).value === "string"
+                    ? (first as { value?: unknown }).value
+                    : typeof (first as { value?: unknown }).value === "number" && Number.isFinite((first as { value?: unknown }).value)
+                      ? String((first as { value?: unknown }).value)
+                      : null;
+            if (candidate != null) {
+              return extractTextValue(candidate);
+            }
+          }
+          if (typeof first === "string" || (typeof first === "number" && Number.isFinite(first))) {
+            return extractTextValue(first);
+          }
+        }
+        return extractTextValue(cellValue);
+      };
+
+      const clearInnerValues = async () => {
+        const clears: Promise<unknown>[] = [];
+        for (const key of INNER_FIELD_KEYS) {
+          const fieldId = fieldIds[key];
+          if (fieldId) {
+            clears.push(table.setCellValue(fieldId, recordId, null));
+          }
+        }
+        if (clears.length) {
+          await Promise.all(clears);
+        }
+      };
+
+      const rawItemCode = fieldIds.itemCode ? fetchText("itemCode") : null;
+      const itemCode =
+        rawItemCode && rawItemCode.trim().length ? rawItemCode.trim() : null;
+      label = formatRecordLabel(recordId, index, itemCode);
 
       const itemWidth = fetchValue("itemWidth");
       const itemDepth = fetchValue("itemDepth");
@@ -96,66 +198,132 @@ export async function runCalculation(
       const innerQtyRaw = fetchValue("innerQty");
       const masterQtyRaw = fetchValue("masterQty");
 
-      if (!isPositive(itemWidth) || !isPositive(itemDepth) || !isPositive(itemHeight)) {
+      if (
+        !isPositive(itemWidth) ||
+        !isPositive(itemDepth) ||
+        !isPositive(itemHeight)
+      ) {
         onLog(`${label} 未填写完整的产品尺寸，已跳过。`);
         processed += 1;
         continue;
       }
 
-      const innerQty = innerQtyRaw ? Math.trunc(innerQtyRaw) : 0;
-      const masterQty = masterQtyRaw ? Math.trunc(masterQtyRaw) : 0;
+      if (innerQtyRaw != null && !Number.isInteger(innerQtyRaw)) {
+        onLog(`${label} Inner Qty 需为整数，已跳过。`);
+        processed += 1;
+        continue;
+      }
+
+      if (masterQtyRaw != null && !Number.isInteger(masterQtyRaw)) {
+        onLog(`${label} Master Qty 需为整数，已跳过。`);
+        processed += 1;
+        continue;
+      }
+
+      const innerQty = innerQtyRaw ?? 0;
+      const masterQty = masterQtyRaw ?? 0;
 
       const existingInnerWidth = fetchValue("innerWidth");
       const existingInnerDepth = fetchValue("innerDepth");
       const existingInnerHeight = fetchValue("innerHeight");
       const existingInnerWeightLb = fetchValue("innerWeight");
 
-      let innerArrangement = null;
-      let innerGrossWeightLb: number | null = null;
+      let innerArrangement: ArrangementResult | null = null;
+      let masterArrangement: ArrangementResult | null = null;
+      let netWeightKg: number | null = null;
+
+      const innerUpdates: Promise<unknown>[] = [];
 
       if (innerQty > 0) {
-        if ([itemWidth, itemDepth, itemHeight, itemWeight].some((value) => value == null)) {
-          onLog(`${label} 缺少产品尺寸或重量，无法计算中盒。`);
+        const arrangement = computeBestArrangement(
+          innerQty,
+          {
+            width: itemWidth as number,
+            depth: itemDepth as number,
+            height: itemHeight as number,
+          },
+          innerBufferInches
+        );
+
+        if (!arrangement) {
+          onLog(`${label} 未找到适合的中盒排列方式。`);
         } else {
-          const arrangement = computeBestArrangement(
-            innerQty,
-            {
-              width: itemWidth as number,
-              depth: itemDepth as number,
-              height: itemHeight as number,
-            },
-            innerBufferInches
-          );
-
-          if (!arrangement) {
-            onLog(`${label} 未找到适合的中盒排列方式。`);
-          } else {
-            innerArrangement = arrangement;
-            innerGrossWeightLb = computePackagingWeightLb(
-              innerQty,
-              itemWeight as number,
-              innerMaterial
+          innerArrangement = arrangement;
+          if (fieldIds.innerWidth) {
+            innerUpdates.push(
+              table.setCellValue(
+                fieldIds.innerWidth,
+                recordId,
+                round(arrangement.width, 3)
+              )
             );
-
-            const innerUpdates = [
-              table.setCellValue(fieldIds.innerWidth, recordId, round(arrangement.width, 3)),
-              table.setCellValue(fieldIds.innerDepth, recordId, round(arrangement.depth, 3)),
-              table.setCellValue(fieldIds.innerHeight, recordId, round(arrangement.height, 3)),
-            ];
-            if (fieldIds.innerWeight && innerGrossWeightLb != null) {
-              innerUpdates.push(
-                table.setCellValue(fieldIds.innerWeight, recordId, round(innerGrossWeightLb, 3))
-              );
-            }
-            await Promise.all(innerUpdates);
-
-            onLog(
-              `${label} 中盒尺寸更新：${arrangement.width.toFixed(2)} × ${arrangement.depth.toFixed(2)} × ${arrangement.height.toFixed(2)} (in)。`
+          }
+          if (fieldIds.innerDepth) {
+            innerUpdates.push(
+              table.setCellValue(
+                fieldIds.innerDepth,
+                recordId,
+                round(arrangement.depth, 3)
+              )
+            );
+          }
+          if (fieldIds.innerHeight) {
+            innerUpdates.push(
+              table.setCellValue(
+                fieldIds.innerHeight,
+                recordId,
+                round(arrangement.height, 3)
+              )
             );
           }
         }
+
+        const computedInnerWeight = computeInnerGrossWeightLb(
+          innerQty,
+          itemWeight,
+          innerMaterial
+        );
+        if (computedInnerWeight != null) {
+          if (fieldIds.innerWeight) {
+            const shouldUpdate =
+              !isPositive(existingInnerWeightLb) ||
+              Math.abs((existingInnerWeightLb ?? 0) - computedInnerWeight) >
+                0.001;
+            if (shouldUpdate) {
+              innerUpdates.push(
+                table.setCellValue(
+                  fieldIds.innerWeight,
+                  recordId,
+                  round(computedInnerWeight, 3)
+                )
+              );
+              onLog(
+                `${label} 自动补全中盒毛重：${computedInnerWeight.toFixed(
+                  3
+                )} lbs。`
+              );
+            }
+          }
+        } else if (!isPositive(existingInnerWeightLb)) {
+          onLog(`${label} 缺少产品重量，无法推算中盒毛重。`);
+        }
       } else {
         onLog(`${label} Inner Qty 为 0 或空，视为无中盒。`);
+        await clearInnerValues();
+      }
+
+      if (innerUpdates.length) {
+        await Promise.all(innerUpdates);
+      }
+
+      if (innerArrangement) {
+        onLog(
+          `${label} 中盒尺寸更新：${innerArrangement.width.toFixed(
+            2
+          )} × ${innerArrangement.depth.toFixed(
+            2
+          )} × ${innerArrangement.height.toFixed(2)} (in)。`
+        );
       }
 
       if (masterQty <= 0) {
@@ -164,7 +332,8 @@ export async function runCalculation(
           try {
             await bitable.ui.showToast({
               toastType: ToastType.warning,
-              message: "Case pack is zero, pls input the master qty as case pack!",
+              message:
+                "Case pack is zero, pls input the master qty as case pack!",
             });
           } catch (toastError) {
             logError("toast", toastError);
@@ -174,20 +343,43 @@ export async function runCalculation(
         continue;
       }
 
-      let masterArrangement = null;
-      let netWeightKg: number | null = null;
+      const divisor = innerQty > 0 ? innerQty : 1;
+      const ratio = masterQty / divisor;
+      if (!Number.isFinite(ratio) || ratio <= 0) {
+        onLog(
+          `${label} Master Qty (${masterQty}) 与 Inner Qty (${innerQty}) 的比例无效，已跳过。`
+        );
+        processed += 1;
+        continue;
+      }
+
+      const masterUpdates: Promise<unknown>[] = [];
 
       if (innerQty > 0) {
-        const innersPerMaster = masterQty / innerQty;
-        if (!Number.isInteger(innersPerMaster) || innersPerMaster <= 0) {
-          onLog(`${label} Master Qty (${masterQty}) 无法被 Inner Qty (${innerQty}) 整除，外箱计算已跳过。`);
+        const innersPerMaster = ratio;
+        if (!Number.isInteger(innersPerMaster)) {
+          onLog(
+            `${label} Master Qty (${masterQty}) 无法被 Inner Qty (${innerQty}) 整除，外箱计算已跳过。`
+          );
           processed += 1;
           continue;
         }
 
-        const baseWidth = [innerArrangement?.width, existingInnerWidth, itemWidth].find(isPositive);
-        const baseDepth = [innerArrangement?.depth, existingInnerDepth, itemDepth].find(isPositive);
-        const baseHeight = [innerArrangement?.height, existingInnerHeight, itemHeight].find(isPositive);
+        const baseWidth = [
+          innerArrangement?.width,
+          existingInnerWidth,
+          itemWidth,
+        ].find(isPositive);
+        const baseDepth = [
+          innerArrangement?.depth,
+          existingInnerDepth,
+          itemDepth,
+        ].find(isPositive);
+        const baseHeight = [
+          innerArrangement?.height,
+          existingInnerHeight,
+          itemHeight,
+        ].find(isPositive);
 
         if (!baseWidth || !baseDepth || !baseHeight) {
           onLog(`${label} 缺少可用的中盒尺寸，无法计算外箱。`);
@@ -195,7 +387,7 @@ export async function runCalculation(
           continue;
         }
 
-        masterArrangement = computeBestArrangement(
+        const arrangement = computeBestArrangement(
           innersPerMaster,
           {
             width: baseWidth,
@@ -205,69 +397,121 @@ export async function runCalculation(
           masterBufferInches
         );
 
-        if (!masterArrangement) {
+        if (!arrangement) {
           onLog(`${label} 未找到适合的外箱排列方式。`);
           processed += 1;
           continue;
         }
 
-        const innerWeightSourceLb =
-          innerGrossWeightLb ?? existingInnerWeightLb ?? computePackagingWeightLb(innerQty, itemWeight, innerMaterial);
-
-        if (innerWeightSourceLb != null) {
-          netWeightKg = innerWeightSourceLb * innersPerMaster * 0.4536;
-        } else if (itemWeight != null) {
-          netWeightKg = (itemWeight / 1000) * masterQty;
+        masterArrangement = arrangement;
+        if (fieldIds.masterWidth) {
+          masterUpdates.push(
+            table.setCellValue(
+              fieldIds.masterWidth,
+              recordId,
+              round(arrangement.width, 3)
+            )
+          );
+        }
+        if (fieldIds.masterDepth) {
+          masterUpdates.push(
+            table.setCellValue(
+              fieldIds.masterDepth,
+              recordId,
+              round(arrangement.depth, 3)
+            )
+          );
+        }
+        if (fieldIds.masterHeight) {
+          masterUpdates.push(
+            table.setCellValue(
+              fieldIds.masterHeight,
+              recordId,
+              round(arrangement.height, 3)
+            )
+          );
         }
       } else {
-        // 无中盒，仅使用单品尺寸
-        if (!isPositive(itemWidth) || !isPositive(itemDepth) || !isPositive(itemHeight)) {
-          onLog(`${label} 缺少产品尺寸，无法计算外箱。`);
-          processed += 1;
-          continue;
-        }
-
-        masterArrangement = computeBestArrangement(
+        const arrangement = computeBestArrangement(
           masterQty,
           {
-            width: itemWidth,
-            depth: itemDepth,
-            height: itemHeight,
+            width: itemWidth as number,
+            depth: itemDepth as number,
+            height: itemHeight as number,
           },
           masterBufferInches
         );
 
-        if (!masterArrangement) {
+        if (!arrangement) {
           onLog(`${label} 未找到适合的外箱排列方式。`);
           processed += 1;
           continue;
         }
 
-        if (itemWeight != null) {
-          netWeightKg = (itemWeight / 1000) * masterQty;
+        masterArrangement = arrangement;
+        if (fieldIds.masterWidth) {
+          masterUpdates.push(
+            table.setCellValue(
+              fieldIds.masterWidth,
+              recordId,
+              round(arrangement.width, 3)
+            )
+          );
+        }
+        if (fieldIds.masterDepth) {
+          masterUpdates.push(
+            table.setCellValue(
+              fieldIds.masterDepth,
+              recordId,
+              round(arrangement.depth, 3)
+            )
+          );
+        }
+        if (fieldIds.masterHeight) {
+          masterUpdates.push(
+            table.setCellValue(
+              fieldIds.masterHeight,
+              recordId,
+              round(arrangement.height, 3)
+            )
+          );
         }
       }
 
-      if (!masterArrangement) {
-        processed += 1;
-        continue;
+      if (isPositive(itemWeight)) {
+        netWeightKg = round(((itemWeight as number) / 1000) * masterQty, 3);
+        if (fieldIds.netWeight) {
+          masterUpdates.push(
+            table.setCellValue(fieldIds.netWeight, recordId, netWeightKg)
+          );
+        }
+      } else {
+        onLog(`${label} 缺少产品重量，净重未更新。`);
       }
 
-      const updates = [
-        table.setCellValue(fieldIds.masterWidth, recordId, round(masterArrangement.width, 3)),
-        table.setCellValue(fieldIds.masterDepth, recordId, round(masterArrangement.depth, 3)),
-        table.setCellValue(fieldIds.masterHeight, recordId, round(masterArrangement.height, 3)),
-      ];
-
-      if (fieldIds.netWeight && netWeightKg != null) {
-        updates.push(table.setCellValue(fieldIds.netWeight, recordId, round(netWeightKg, 3)));
+      if (masterUpdates.length) {
+        await Promise.all(masterUpdates);
       }
 
-      await Promise.all(updates);
+      if (masterArrangement) {
+        onLog(
+          `${label} 外箱尺寸更新：${masterArrangement.width.toFixed(
+            2
+          )} × ${masterArrangement.depth.toFixed(
+            2
+          )} × ${masterArrangement.height.toFixed(2)} (in)。`
+        );
+      }
 
-      onLog(
-        `${label} 外箱尺寸更新：${masterArrangement.width.toFixed(2)} × ${masterArrangement.depth.toFixed(2)} × ${masterArrangement.height.toFixed(2)} (in)。`
-      );
+      if (netWeightKg != null) {
+        if (fieldIds.netWeight) {
+          onLog(`${label} 净重更新：${netWeightKg.toFixed(3)} kg。`);
+        } else {
+          onLog(
+            `${label} 未配置净重字段，无法写入 ${netWeightKg.toFixed(3)} kg。`
+          );
+        }
+      }
 
       processed += 1;
     } catch (err) {

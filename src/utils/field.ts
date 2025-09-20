@@ -13,16 +13,12 @@ export function getFieldIdByName(
   expectType?: number
 ): string | undefined {
   const normalizedTarget = normalizeFieldName(name);
-  let candidate = fieldMetas.find((meta) => {
+  const candidate = fieldMetas.find((meta) => {
     const matchesName = normalizeFieldName(meta.name) === normalizedTarget;
     if (!matchesName) return false;
     if (expectType == null) return true;
     return meta.type === expectType;
   });
-
-  if (!candidate && expectType != null) {
-    candidate = fieldMetas.find((meta) => meta.type === expectType);
-  }
 
   return candidate?.id;
 }

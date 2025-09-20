@@ -17,11 +17,15 @@ export const FIELD_KEYS = {
   masterHeight: { name: "Master Height (inch)", type: 2 },
   masterWidth: { name: "Master Width (inch)", type: 2 },
   masterDepth: { name: "Master Depth (inch)", type: 2 },
-  grossWeight: { name: "G. W (lbs)", type: 2 },
   netWeight: { name: "N.W. (kg)", type: 2 },
 } as const;
 
+export const OPTIONAL_FIELD_KEYS = {
+  itemCode: { name: "ITEM#" },
+} as const;
+
 export type FieldKey = keyof typeof FIELD_KEYS;
+export type OptionalFieldKey = keyof typeof OPTIONAL_FIELD_KEYS;
 
 export interface FieldIds {
   itemHeight: string;
@@ -37,6 +41,6 @@ export interface FieldIds {
   masterHeight: string;
   masterWidth: string;
   masterDepth: string;
-  grossWeight: string;
   netWeight: string;
+  itemCode: string;
 }

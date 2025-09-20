@@ -1,5 +1,11 @@
 import { bitable } from "@lark-base-open/js-sdk";
-import { FIELD_KEYS, type FieldIds, type FieldKey } from "../config/fields";
+import {
+  FIELD_KEYS,
+  OPTIONAL_FIELD_KEYS,
+  type FieldIds,
+  type FieldKey,
+  type OptionalFieldKey,
+} from "../config/fields";
 import { getFieldIdByName, type FieldMetaLike } from "../utils/field";
 
 export interface PluginContext {
@@ -26,19 +32,27 @@ interface TableCandidate {
 }
 
 function buildFieldMap(fieldMetas: FieldMetaLike[]): { fieldIds: FieldIds; missingFields: string[] } {
-  const entries = Object.entries(FIELD_KEYS).map(([key, info]) => {
+  const requiredEntries = Object.entries(FIELD_KEYS).map(([key, info]) => {
     const id = getFieldIdByName(fieldMetas, info.name, info.type);
-    return [key, id ?? ""] as const;
+    return [key as FieldKey, id ?? ""] as const;
   });
 
-  const missingFields = entries
-    .filter(([, id]) => !id)
-    .map(([key]) => FIELD_KEYS[key as FieldKey].name);
+  const optionalEntries = Object.entries(OPTIONAL_FIELD_KEYS).map(([key, info]) => {
+    const id = getFieldIdByName(fieldMetas, info.name, info.type);
+    return [key as OptionalFieldKey, id ?? ""] as const;
+  });
 
-  const fieldIds = entries.reduce<Record<string, string>>((acc, [key, id]) => {
-    acc[key] = id ?? "";
-    return acc;
-  }, {}) as FieldIds;
+  const missingFields = requiredEntries
+    .filter(([, id]) => !id)
+    .map(([key]) => FIELD_KEYS[key].name);
+
+  const fieldIds = Object.create(null) as FieldIds;
+  for (const [key, id] of requiredEntries) {
+    fieldIds[key] = id ?? "";
+  }
+  for (const [key, id] of optionalEntries) {
+    fieldIds[key] = id ?? "";
+  }
 
   return { fieldIds, missingFields };
 }

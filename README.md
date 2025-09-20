@@ -44,7 +44,6 @@ The plugin looks up fields by _display name_. Ensure the active table contains t
 | `masterWidth` | `Master Width (inch)` | Calculated master carton width. |
 | `masterDepth` | `Master Depth (inch)` | Calculated master carton depth. |
 | `masterHeight` | `Master Height (inch)` | Calculated master carton height. |
-| `grossWeight` | `G. W (lbs)` | Reserved for future use (not set by current logic). |
 | `netWeight` | `N.W. (kg)` | Calculated net weight for the master carton. |
 
 > Tip: If your sheet must use different labels, adjust `FIELD_KEYS` in `src/config/fields.ts` to keep the plugin in sync.
