@@ -40,7 +40,7 @@
                 id="masterBuffer"
                 class="number-input"
                 type="number"
-                value="1"
+                value="1.5"
                 min="0"
                 step="0.1"
               />
@@ -60,6 +60,49 @@
             <option value="Box">Box</option>
             <option value="Poly Bag">Poly Bag</option>
           </select>
+        </div>
+
+        <div class="control-group overlap-group">
+          <div class="control-header">
+            <label class="control-label" for="overlapHeight">Overlap</label>
+            <button id="overlapReset" type="button" class="overlap-reset">Reset</button>
+          </div>
+          <div class="control-row overlap-row">
+            <div class="overlap-field">
+              <span class="overlap-field-label">宽</span>
+              <input
+                id="overlapWidth"
+                class="number-input"
+                type="number"
+                value="0"
+                step="0.1"
+              />
+            </div>
+            <div class="overlap-field">
+              <span class="overlap-field-label">深</span>
+              <input
+                id="overlapDepth"
+                class="number-input"
+                type="number"
+                value="0"
+                step="0.1"
+              />
+            </div>
+            <div class="overlap-field">
+              <span class="overlap-field-label">高</span>
+              <input
+                id="overlapHeight"
+                class="number-input"
+                type="number"
+                value="0"
+                step="0.1"
+              />
+            </div>
+            <select id="overlapUnit" class="select-input overlap-unit-select">
+              <option value="cm" selected>cm</option>
+              <option value="inch">inch</option>
+            </select>
+          </div>
         </div>
 
         <label class="checkbox-field">

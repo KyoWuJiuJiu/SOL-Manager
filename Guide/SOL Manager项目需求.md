@@ -79,6 +79,7 @@ N.W. (kg)（外箱的净重）
             1. 当中盒的material是poly bag的时候, 那么buffer强制用0来计算. 不管inner buffer填写的是什么数字, 都用0来计算. 
          4. 中盒的毛重的计算方法: (inner pack x item weight (g)+100) x 0.00220462(g转换成lb), 如果用户选择的inner material是Poly Bag的话, 那么这里的100就是0, 因为poly bag假设没有重量.
          5. Cube feet = 中盒 高 x 宽 x 深, 在历遍第1点中的所有情况以后, 选择cube feet为最小的情况下的尺寸和重量. 所以这个就是选择数据的标准 Cube Feet = Minium
+         6. 若存在产品重叠（Overlap），按照输入的高/宽/深 overlap 在对应方向上扣减相邻产品之间的尺寸：实际尺寸 = 原始尺寸 × 排列数量 − overlap × (排列数量 − 1) + buffer；overlap 可为负值表示间距。单位支持 cm/inch，需与计算保持一致。
    2. 再找到 Master Qty 这个字段的数字
       1. 如果 master qty 字段是 0 或空白, 那么需要对话框提示, Case pack is zero, pls input the master qty as case pack!. 并且跳过该条记录
       2. Master Qty 必须是整数，出现小数或非数值时跳过并记录提示

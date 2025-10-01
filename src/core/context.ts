@@ -6,7 +6,7 @@ import {
   type FieldKey,
   type OptionalFieldKey,
 } from "../config/fields";
-import { getFieldIdByName, type FieldMetaLike } from "../utils/field";
+import { findFieldMetaByName, type FieldMetaLike } from "../utils/field";
 
 export interface PluginContext {
   table: any;
@@ -14,6 +14,9 @@ export interface PluginContext {
   tableName: string;
   viewName: string;
   fieldIds: FieldIds;
+  fieldMetaMap: Partial<
+    Record<FieldKey | OptionalFieldKey, FieldMetaLike | undefined>
+  >;
 }
 
 export interface ContextLoadResult {
@@ -27,34 +30,46 @@ interface TableCandidate {
   tableName: string;
   viewName: string;
   fieldIds: FieldIds;
+  fieldMetaMap: Partial<
+    Record<FieldKey | OptionalFieldKey, FieldMetaLike | undefined>
+  >;
   missingFields: string[];
   recordCount: number;
 }
 
-function buildFieldMap(fieldMetas: FieldMetaLike[]): { fieldIds: FieldIds; missingFields: string[] } {
-  const requiredEntries = Object.entries(FIELD_KEYS).map(([key, info]) => {
-    const id = getFieldIdByName(fieldMetas, info.name, info.type);
-    return [key as FieldKey, id ?? ""] as const;
-  });
-
-  const optionalEntries = Object.entries(OPTIONAL_FIELD_KEYS).map(([key, info]) => {
-    const id = getFieldIdByName(fieldMetas, info.name, info.type);
-    return [key as OptionalFieldKey, id ?? ""] as const;
-  });
-
-  const missingFields = requiredEntries
-    .filter(([, id]) => !id)
-    .map(([key]) => FIELD_KEYS[key].name);
-
+function buildFieldMap(fieldMetas: FieldMetaLike[]): {
+  fieldIds: FieldIds;
+  missingFields: string[];
+  fieldMetaMap: Partial<
+    Record<FieldKey | OptionalFieldKey, FieldMetaLike | undefined>
+  >;
+} {
   const fieldIds = Object.create(null) as FieldIds;
-  for (const [key, id] of requiredEntries) {
-    fieldIds[key] = id ?? "";
-  }
-  for (const [key, id] of optionalEntries) {
-    fieldIds[key] = id ?? "";
+  const fieldMetaMap = Object.create(null) as Partial<
+    Record<FieldKey | OptionalFieldKey, FieldMetaLike | undefined>
+  >;
+
+  const missingFields: string[] = [];
+
+  for (const [key, info] of Object.entries(FIELD_KEYS) as [FieldKey, typeof FIELD_KEYS[FieldKey]][]) {
+    const meta = findFieldMetaByName(fieldMetas, info.name, info.type);
+    fieldIds[key] = meta?.id ?? "";
+    fieldMetaMap[key] = meta;
+    if (!meta) {
+      missingFields.push(info.name);
+    }
   }
 
-  return { fieldIds, missingFields };
+  for (const [key, info] of Object.entries(OPTIONAL_FIELD_KEYS) as [
+    OptionalFieldKey,
+    (typeof OPTIONAL_FIELD_KEYS)[OptionalFieldKey]
+  ][]) {
+    const meta = findFieldMetaByName(fieldMetas, info.name, info.type);
+    fieldIds[key] = meta?.id ?? "";
+    fieldMetaMap[key] = meta;
+  }
+
+  return { fieldIds, missingFields, fieldMetaMap };
 }
 
 async function getRecordCount(table: any, view: any | null): Promise<number> {
@@ -136,7 +151,9 @@ async function buildCandidates(): Promise<TableCandidate[]> {
       if (!table) continue;
       const fieldMetas = await table.getFieldMetaList?.();
       if (!Array.isArray(fieldMetas)) continue;
-      const { fieldIds, missingFields } = buildFieldMap(fieldMetas as FieldMetaLike[]);
+      const { fieldIds, missingFields, fieldMetaMap } = buildFieldMap(
+        fieldMetas as FieldMetaLike[]
+      );
       const { view, name: viewName, recordCount } = await pickView(table);
       const tableName = meta?.name ?? (await table.getName?.()) ?? "";
       candidates.push({
@@ -145,6 +162,7 @@ async function buildCandidates(): Promise<TableCandidate[]> {
         tableName,
         viewName,
         fieldIds,
+        fieldMetaMap,
         missingFields,
         recordCount,
       });
@@ -177,7 +195,9 @@ async function loadFromActive(): Promise<ContextLoadResult> {
     table.getFieldMetaList(),
   ]);
 
-  const { fieldIds, missingFields } = buildFieldMap(fieldMetas as FieldMetaLike[]);
+  const { fieldIds, missingFields, fieldMetaMap } = buildFieldMap(
+    fieldMetas as FieldMetaLike[]
+  );
 
   return {
     context: {
@@ -186,6 +206,7 @@ async function loadFromActive(): Promise<ContextLoadResult> {
       tableName,
       viewName,
       fieldIds,
+      fieldMetaMap,
     },
     missingFields,
   };
@@ -204,6 +225,7 @@ export async function loadPluginContext(): Promise<ContextLoadResult> {
           tableName: best.tableName,
           viewName: best.viewName,
           fieldIds: best.fieldIds,
+          fieldMetaMap: best.fieldMetaMap,
         },
         missingFields: best.missingFields,
       };

@@ -63,6 +63,13 @@ body {
   gap: 8px;
 }
 
+.control-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .control-label {
   font-size: 13px;
   font-weight: 600;
@@ -244,4 +251,46 @@ body {
 .buffer-unit-select {
   width: 80px;
   flex: 0 0 80px;
+}
+
+.overlap-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: nowrap;
+}
+
+.overlap-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.overlap-field-label {
+  font-size: 12px;
+  color: #475569;
+}
+
+.overlap-unit-select {
+  width: 80px;
+  flex: 0 0 80px;
+}
+
+.overlap-reset {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #f97316;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.overlap-reset:hover {
+  background: #fed7aa;
+  color: #7c2d12;
 }

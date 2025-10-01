@@ -17,8 +17,20 @@ export function extractNumber(cellValue: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
   if (typeof cellValue === "object") {
-    const maybeNumber = (cellValue as { value?: unknown }).value;
-    if (typeof maybeNumber === "number" && Number.isFinite(maybeNumber)) return maybeNumber;
+    const candidate = cellValue as { value?: unknown; text?: unknown };
+    const rawValue =
+      typeof candidate.value === "number" && Number.isFinite(candidate.value)
+        ? candidate.value
+        : typeof candidate.value === "string"
+        ? Number(candidate.value)
+        : typeof candidate.text === "number" && Number.isFinite(candidate.text)
+        ? candidate.text
+        : typeof candidate.text === "string"
+        ? Number(candidate.text)
+        : null;
+    if (typeof rawValue === "number" && Number.isFinite(rawValue)) {
+      return rawValue;
+    }
   }
   return null;
 }

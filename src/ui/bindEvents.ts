@@ -30,6 +30,8 @@ export function bindUIEvents() {
   const $logList = $("#logList");
   const $logPlaceholder = $("#logPlaceholder");
   const $calculateButton = $("#calculateButton");
+  const $controls = $(".controls");
+  const $overlapReset = $("#overlapReset");
   const $confirmOverlay = $("#confirmOverlay");
   const $confirmMessage = $("#confirmMessage");
   const $confirmOk = $("#confirmOk");
@@ -205,6 +207,32 @@ export function bindUIEvents() {
     $logPlaceholder.show();
   }
 
+  function resetOverlapFields() {
+    ($("#overlapHeight") as JQuery<HTMLInputElement>).val("0");
+    ($("#overlapWidth") as JQuery<HTMLInputElement>).val("0");
+    ($("#overlapDepth") as JQuery<HTMLInputElement>).val("0");
+    ($("#overlapUnit") as JQuery<HTMLSelectElement>).val("cm");
+  }
+
+  $overlapReset.on("click", () => {
+    resetOverlapFields();
+  });
+
+  $controls.on("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    const target = event.target as HTMLElement;
+    if (!target) return;
+    const tag = target.tagName.toLowerCase();
+    if (tag !== "input" && tag !== "select") return;
+    if (target === $calculateButton.get(0) || target === $overlapReset.get(0)) {
+      return;
+    }
+    event.preventDefault();
+    if (!$calculateButton.prop("disabled")) {
+      $calculateButton.trigger("click");
+    }
+  });
+
   $calculateButton.on("click", async () => {
     if (!context) {
       showError("插件尚未准备就绪，稍后再试。");
@@ -223,9 +251,17 @@ export function bindUIEvents() {
         const selectedIds = await context.view.getSelectedRecordIdList();
         const hasSelection = Array.isArray(selectedIds) && selectedIds.some(Boolean);
         if (!hasSelection) {
-          const confirmed = await showConfirmAllRecords(
-            "未选择任何记录，是否计算当前视图的全部记录？"
-          );
+          const overlapValues = [
+            parseNumber($("#overlapWidth") as JQuery<HTMLInputElement>),
+            parseNumber($("#overlapDepth") as JQuery<HTMLInputElement>),
+            parseNumber($("#overlapHeight") as JQuery<HTMLInputElement>),
+          ];
+          const positiveOverlap = overlapValues.some((val) => val !== 0);
+          const message = positiveOverlap
+            ? "Warning! 你选择了 overlap，并且没有选中具体记录。确认是否要对全部产品套用当前 overlap？"
+            : "未选择任何记录，是否计算当前视图的全部记录？";
+
+          const confirmed = await showConfirmAllRecords(message);
           if (!confirmed) {
             return;
           }
@@ -243,6 +279,10 @@ export function bindUIEvents() {
     const masterBuffer = parseNumber($("#masterBuffer") as JQuery<HTMLInputElement>);
     const bufferUnit = $("#bufferUnit").val() as BufferUnit;
     const innerMaterial = $("#innerMaterial").val() as InnerMaterial;
+    const overlapHeight = parseNumber($("#overlapHeight") as JQuery<HTMLInputElement>);
+    const overlapWidth = parseNumber($("#overlapWidth") as JQuery<HTMLInputElement>);
+    const overlapDepth = parseNumber($("#overlapDepth") as JQuery<HTMLInputElement>);
+    const overlapUnit = $("#overlapUnit").val() as BufferUnit;
 
     try {
       await runCalculation(context, {
@@ -252,6 +292,10 @@ export function bindUIEvents() {
         masterBuffer,
         masterBufferUnit: bufferUnit,
         innerMaterial,
+        overlapHeight,
+        overlapWidth,
+        overlapDepth,
+        overlapUnit,
         onLog: withLogs,
       });
       showToast("计算完成", "success");

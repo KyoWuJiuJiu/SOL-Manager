@@ -63,18 +63,41 @@ function generateFactorTriples(quantity: number): ArrangementCounts[] {
 export function computeBestArrangement(
   quantity: number,
   dims: ArrangementInput,
-  bufferInch: number
+  bufferInch: number,
+  overlap?: Partial<ArrangementInput>
 ): ArrangementResult | null {
   const triples = generateFactorTriples(quantity);
   if (!triples.length) return null;
 
+  const MAX_DIM_INCH = 21;
+
   let best: ArrangementResult | null = null;
   for (const counts of triples) {
     const [countW, countD, countH] = counts;
-    const width = countW * dims.width + bufferInch;
-    const depth = countD * dims.depth + bufferInch;
-    const height = countH * dims.height + bufferInch;
-    if ([width, depth, height].some((value) => !Number.isFinite(value) || value <= 0)) {
+    const overlapWidth = overlap?.width ?? 0;
+    const overlapDepth = overlap?.depth ?? 0;
+    const overlapHeight = overlap?.height ?? 0;
+
+    const netWidth = countW * dims.width - overlapWidth * Math.max(countW - 1, 0);
+    const netDepth = countD * dims.depth - overlapDepth * Math.max(countD - 1, 0);
+    const netHeight = countH * dims.height - overlapHeight * Math.max(countH - 1, 0);
+
+    if (!Number.isFinite(netWidth) || !Number.isFinite(netDepth) || !Number.isFinite(netHeight)) {
+      continue;
+    }
+    if (netWidth <= 0 || netDepth <= 0 || netHeight <= 0) {
+      continue;
+    }
+
+    const width = netWidth + bufferInch;
+    const depth = netDepth + bufferInch;
+    const height = netHeight + bufferInch;
+    if (
+      [width, depth, height].some(
+        (value) =>
+          !Number.isFinite(value) || value <= 0 || value > MAX_DIM_INCH
+      )
+    ) {
       continue;
     }
     const cubeFeet = (width * depth * height) / 1728;

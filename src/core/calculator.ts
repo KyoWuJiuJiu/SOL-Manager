@@ -1,6 +1,7 @@
 import { bitable, ToastType } from "@lark-base-open/js-sdk";
 import type { PluginContext } from "./context";
-import type { FieldIds } from "../config/fields";
+import type { FieldIds, FieldKey, OptionalFieldKey } from "../config/fields";
+import { FIELD_KEYS, OPTIONAL_FIELD_KEYS } from "../config/fields";
 import { computeBestArrangement, type ArrangementResult } from "./arrangement";
 import { convertBufferToInches, extractNumber, round } from "../utils/numbers";
 import { logError } from "../utils/logger";
@@ -26,6 +27,10 @@ export interface CalculationOptions {
   masterBuffer: number;
   masterBufferUnit: BufferUnit;
   innerMaterial: InnerMaterial;
+  overlapHeight: number;
+  overlapWidth: number;
+  overlapDepth: number;
+  overlapUnit: BufferUnit;
   onLog: (message: string) => void;
 }
 
@@ -93,14 +98,18 @@ export async function runCalculation(
   context: PluginContext,
   options: CalculationOptions
 ): Promise<void> {
-  const { table, view, fieldIds } = context;
+  const { table, view, fieldIds, fieldMetaMap } = context;
   const {
     forceAll,
-      innerBuffer,
-      innerBufferUnit,
+    innerBuffer,
+    innerBufferUnit,
     masterBuffer,
     masterBufferUnit,
     innerMaterial,
+    overlapHeight,
+    overlapWidth,
+    overlapDepth,
+    overlapUnit,
     onLog,
   } = options;
 
@@ -114,6 +123,42 @@ export async function runCalculation(
     masterBuffer,
     masterBufferUnit
   );
+  const overlapHeightInches = convertBufferToInches(
+    overlapHeight,
+    overlapUnit
+  );
+  const overlapWidthInches = convertBufferToInches(
+    overlapWidth,
+    overlapUnit
+  );
+  const overlapDepthInches = convertBufferToInches(
+    overlapDepth,
+    overlapUnit
+  );
+  void overlapHeightInches;
+  void overlapWidthInches;
+  void overlapDepthInches;
+
+  const getFieldDisplayName = (key: keyof FieldIds): string => {
+    if ((FIELD_KEYS as Record<string, { name: string }>)[key as FieldKey]) {
+      return FIELD_KEYS[key as FieldKey].name;
+    }
+    if (
+      (OPTIONAL_FIELD_KEYS as Record<string, { name: string }>)[
+        key as OptionalFieldKey
+      ]
+    ) {
+      return OPTIONAL_FIELD_KEYS[key as OptionalFieldKey].name;
+    }
+    return key;
+  };
+
+  const canWriteField = (key: keyof FieldIds): boolean => {
+    if (!fieldIds[key]) return false;
+    const meta = fieldMetaMap?.[key];
+    if (!meta || meta.type == null) return true;
+    return meta.type === 2;
+  };
 
   const selectedIds = normaliseIds(await view.getSelectedRecordIdList());
   let recordIds: string[];
@@ -138,6 +183,26 @@ export async function runCalculation(
     let label = formatRecordLabel(recordId, index, null);
     try {
       const record = await table.getRecordById(recordId);
+      const skippedWriteFields = new Set<string>();
+
+      const trySetNumber = (
+        updates: Promise<unknown>[],
+        key: keyof FieldIds,
+        value: number | null
+      ): boolean => {
+        const fieldId = fieldIds[key];
+        if (!fieldId) return false;
+        if (!canWriteField(key)) {
+          const name = getFieldDisplayName(key);
+          if (!skippedWriteFields.has(name)) {
+            onLog(`${label} 字段 ${name} 为公式字段，已跳过写入。`);
+            skippedWriteFields.add(name);
+          }
+          return false;
+        }
+        updates.push(table.setCellValue(fieldId, recordId, value));
+        return true;
+      };
       const fetchValue = (key: keyof FieldIds): number | null => {
         const fieldId = fieldIds[key];
         if (!fieldId) return null;
@@ -176,10 +241,7 @@ export async function runCalculation(
       const clearInnerValues = async () => {
         const clears: Promise<unknown>[] = [];
         for (const key of INNER_FIELD_KEYS) {
-          const fieldId = fieldIds[key];
-          if (fieldId) {
-            clears.push(table.setCellValue(fieldId, recordId, null));
-          }
+          trySetNumber(clears, key, null);
         }
         if (clears.length) {
           await Promise.all(clears);
@@ -242,40 +304,21 @@ export async function runCalculation(
             depth: itemDepth as number,
             height: itemHeight as number,
           },
-          innerBufferInches
+          innerBufferInches,
+          {
+            width: overlapWidthInches,
+            depth: overlapDepthInches,
+            height: overlapHeightInches,
+          }
         );
 
         if (!arrangement) {
           onLog(`${label} 未找到适合的中盒排列方式。`);
         } else {
           innerArrangement = arrangement;
-          if (fieldIds.innerWidth) {
-            innerUpdates.push(
-              table.setCellValue(
-                fieldIds.innerWidth,
-                recordId,
-                round(arrangement.width, 3)
-              )
-            );
-          }
-          if (fieldIds.innerDepth) {
-            innerUpdates.push(
-              table.setCellValue(
-                fieldIds.innerDepth,
-                recordId,
-                round(arrangement.depth, 3)
-              )
-            );
-          }
-          if (fieldIds.innerHeight) {
-            innerUpdates.push(
-              table.setCellValue(
-                fieldIds.innerHeight,
-                recordId,
-                round(arrangement.height, 3)
-              )
-            );
-          }
+          trySetNumber(innerUpdates, "innerWidth", round(arrangement.width, 3));
+          trySetNumber(innerUpdates, "innerDepth", round(arrangement.depth, 3));
+          trySetNumber(innerUpdates, "innerHeight", round(arrangement.height, 3));
         }
 
         const computedInnerWeight = computeInnerGrossWeightLb(
@@ -290,18 +333,19 @@ export async function runCalculation(
               Math.abs((existingInnerWeightLb ?? 0) - computedInnerWeight) >
                 0.001;
             if (shouldUpdate) {
-              innerUpdates.push(
-                table.setCellValue(
-                  fieldIds.innerWeight,
-                  recordId,
+              if (
+                trySetNumber(
+                  innerUpdates,
+                  "innerWeight",
                   round(computedInnerWeight, 3)
                 )
-              );
-              onLog(
-                `${label} 自动补全中盒毛重：${computedInnerWeight.toFixed(
-                  3
-                )} lbs。`
-              );
+              ) {
+                onLog(
+                  `${label} 自动补全中盒毛重：${computedInnerWeight.toFixed(
+                    3
+                  )} lbs。`
+                );
+              }
             }
           }
         } else if (!isPositive(existingInnerWeightLb)) {
@@ -404,33 +448,9 @@ export async function runCalculation(
         }
 
         masterArrangement = arrangement;
-        if (fieldIds.masterWidth) {
-          masterUpdates.push(
-            table.setCellValue(
-              fieldIds.masterWidth,
-              recordId,
-              round(arrangement.width, 3)
-            )
-          );
-        }
-        if (fieldIds.masterDepth) {
-          masterUpdates.push(
-            table.setCellValue(
-              fieldIds.masterDepth,
-              recordId,
-              round(arrangement.depth, 3)
-            )
-          );
-        }
-        if (fieldIds.masterHeight) {
-          masterUpdates.push(
-            table.setCellValue(
-              fieldIds.masterHeight,
-              recordId,
-              round(arrangement.height, 3)
-            )
-          );
-        }
+        trySetNumber(masterUpdates, "masterWidth", round(arrangement.width, 3));
+        trySetNumber(masterUpdates, "masterDepth", round(arrangement.depth, 3));
+        trySetNumber(masterUpdates, "masterHeight", round(arrangement.height, 3));
       } else {
         const arrangement = computeBestArrangement(
           masterQty,
@@ -439,7 +459,12 @@ export async function runCalculation(
             depth: itemDepth as number,
             height: itemHeight as number,
           },
-          masterBufferInches
+          masterBufferInches,
+          {
+            width: overlapWidthInches,
+            depth: overlapDepthInches,
+            height: overlapHeightInches,
+          }
         );
 
         if (!arrangement) {
@@ -449,48 +474,16 @@ export async function runCalculation(
         }
 
         masterArrangement = arrangement;
-        if (fieldIds.masterWidth) {
-          masterUpdates.push(
-            table.setCellValue(
-              fieldIds.masterWidth,
-              recordId,
-              round(arrangement.width, 3)
-            )
-          );
-        }
-        if (fieldIds.masterDepth) {
-          masterUpdates.push(
-            table.setCellValue(
-              fieldIds.masterDepth,
-              recordId,
-              round(arrangement.depth, 3)
-            )
-          );
-        }
-        if (fieldIds.masterHeight) {
-          masterUpdates.push(
-            table.setCellValue(
-              fieldIds.masterHeight,
-              recordId,
-              round(arrangement.height, 3)
-            )
-          );
-        }
+        trySetNumber(masterUpdates, "masterWidth", round(arrangement.width, 3));
+        trySetNumber(masterUpdates, "masterDepth", round(arrangement.depth, 3));
+        trySetNumber(masterUpdates, "masterHeight", round(arrangement.height, 3));
       }
 
       if (isPositive(itemWeight)) {
         netWeightKg = round(((itemWeight as number) / 1000) * masterQty, 3);
-        if (fieldIds.netWeight) {
-          masterUpdates.push(
-            table.setCellValue(fieldIds.netWeight, recordId, netWeightKg)
-          );
-        }
+        trySetNumber(masterUpdates, "netWeight", netWeightKg);
       } else {
-        if (fieldIds.netWeight) {
-          masterUpdates.push(
-            table.setCellValue(fieldIds.netWeight, recordId, null)
-          );
-        }
+        trySetNumber(masterUpdates, "netWeight", null);
         onLog(`${label} 产品重量为空或为 0，净重已清空。`);
       }
 
@@ -510,7 +503,13 @@ export async function runCalculation(
 
       if (netWeightKg != null) {
         if (fieldIds.netWeight) {
-          onLog(`${label} 净重更新：${netWeightKg.toFixed(3)} kg。`);
+          if (canWriteField("netWeight")) {
+            onLog(`${label} 净重更新：${netWeightKg.toFixed(3)} kg。`);
+          } else {
+            onLog(
+              `${label} 净重字段为公式，无法写入 ${netWeightKg.toFixed(3)} kg。`
+            );
+          }
         } else {
           onLog(
             `${label} 未配置净重字段，无法写入 ${netWeightKg.toFixed(3)} kg。`

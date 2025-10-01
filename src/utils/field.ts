@@ -7,20 +7,33 @@ export interface FieldMetaLike {
   type?: number;
 }
 
+export function findFieldMetaByName(
+  fieldMetas: FieldMetaLike[],
+  name: string,
+  expectType?: number
+): FieldMetaLike | undefined {
+  const normalizedTarget = normalizeFieldName(name);
+  let fallback: FieldMetaLike | undefined;
+
+  for (const meta of fieldMetas) {
+    if (normalizeFieldName(meta.name) !== normalizedTarget) continue;
+    if (expectType == null || meta.type === expectType) {
+      return meta;
+    }
+    if (!fallback) {
+      fallback = meta;
+    }
+  }
+
+  return fallback;
+}
+
 export function getFieldIdByName(
   fieldMetas: FieldMetaLike[],
   name: string,
   expectType?: number
 ): string | undefined {
-  const normalizedTarget = normalizeFieldName(name);
-  const candidate = fieldMetas.find((meta) => {
-    const matchesName = normalizeFieldName(meta.name) === normalizedTarget;
-    if (!matchesName) return false;
-    if (expectType == null) return true;
-    return meta.type === expectType;
-  });
-
-  return candidate?.id;
+  return findFieldMetaByName(fieldMetas, name, expectType)?.id;
 }
 
 export type FieldIdMap = Record<FieldKey, string>;
