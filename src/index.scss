@@ -57,6 +57,60 @@ body {
   gap: 16px;
 }
 
+.field-type-section {
+  border-top: 2px solid #0f172a;
+  padding-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.section-hint {
+  margin: 0;
+  font-size: 13px;
+  color: #475569;
+}
+
+.field-type-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.field-type-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 220px;
+}
+
+.field-type-dialog__row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  color: #1f2937;
+}
+
+.field-type-dialog__label {
+  font-weight: 600;
+}
+
+.field-type-dialog__select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #cbd5f5;
+  border-radius: 6px;
+  font-size: 14px;
+  background: #ffffff;
+}
+
+.field-type-dialog__select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
 .control-group {
   display: flex;
   flex-direction: column;
@@ -127,6 +181,22 @@ body {
 
 .primary-button:not(:disabled):hover {
   background: #1d4ed8;
+}
+
+.secondary-button {
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid #2563eb;
+  background: white;
+  color: #2563eb;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.secondary-button:hover {
+  background: #eff6ff;
 }
 
 .log-section {
@@ -226,6 +296,16 @@ body {
 
 .confirm-button.primary:hover {
   background: #b91c1c;
+}
+
+.confirm-button.secondary {
+  border-color: #f97316;
+  background: #fef3c7;
+  color: #9a3412;
+}
+
+.confirm-button.secondary:hover {
+  background: #fde68a;
 }
 
 .buffer-row {

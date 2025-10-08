@@ -1,8 +1,15 @@
 import $ from "jquery";
 import { bitable } from "@lark-base-open/js-sdk";
 import { loadPluginContext, type PluginContext } from "../core/context";
-import { runCalculation, type BufferUnit, type InnerMaterial } from "../core/calculator";
+import {
+  runCalculation,
+  type BufferUnit,
+  type InnerMaterial,
+} from "../core/calculator";
 import { showError, showToast } from "../utils/logger";
+
+import { initFieldTypeTools } from "./fieldTypeTools";
+import { showConfirmDialog } from "./dialogue";
 
 function parseNumber($input: JQuery<HTMLInputElement>): number {
   const value = Number($input.val());
@@ -24,6 +31,7 @@ interface RefreshOptions {
 }
 
 export function bindUIEvents() {
+  // ...existing code...
   const $status = $("#statusLine");
   const $missing = $("#missingFields");
   const $contextLabel = $("#contextLabel");
@@ -32,12 +40,6 @@ export function bindUIEvents() {
   const $calculateButton = $("#calculateButton");
   const $controls = $(".controls");
   const $overlapReset = $("#overlapReset");
-  const $confirmOverlay = $("#confirmOverlay");
-  const $confirmMessage = $("#confirmMessage");
-  const $confirmOk = $("#confirmOk");
-  const $confirmCancel = $("#confirmCancel");
-  const confirmOverlayEl = $confirmOverlay.get(0);
-
   let context: PluginContext | null = null;
   let missingFields: string[] = [];
   let busy = false;
@@ -115,39 +117,6 @@ export function bindUIEvents() {
     }, 200);
   }
 
-  function showConfirmAllRecords(message: string): Promise<boolean> {
-    return new Promise((resolve) => {
-      $confirmMessage.text(message);
-      $confirmOverlay.attr("hidden", false);
-
-      const cleanup = (result: boolean) => {
-        $confirmOverlay.attr("hidden", true);
-        $confirmOk.off("click", onOk);
-        $confirmCancel.off("click", onCancel);
-        $confirmOverlay.off("click", onOverlayClick);
-        $(document).off("keydown", onKeyDown);
-        resolve(result);
-      };
-
-      const onOk = () => cleanup(true);
-      const onCancel = () => cleanup(false);
-      const onOverlayClick = (evt: JQuery.ClickEvent) => {
-        if (evt.target === confirmOverlayEl) {
-          cleanup(false);
-        }
-      };
-      const onKeyDown = (evt: JQuery.KeyDownEvent) => {
-        if (evt.key === "Escape") {
-          cleanup(false);
-        }
-      };
-
-      $confirmOk.one("click", onOk);
-      $confirmCancel.one("click", onCancel);
-      $confirmOverlay.on("click", onOverlayClick);
-      $(document).on("keydown", onKeyDown);
-    });
-  }
 
   async function refreshContext(options: RefreshOptions = {}) {
     const { showLoading = false } = options;
@@ -156,7 +125,8 @@ export function bindUIEvents() {
     }
 
     try {
-      const { context: ctx, missingFields: missing } = await loadPluginContext();
+      const { context: ctx, missingFields: missing } =
+        await loadPluginContext();
       context = ctx;
       missingFields = missing;
       updateContextLabel(ctx);
@@ -249,7 +219,8 @@ export function bindUIEvents() {
     if (!forceAll) {
       try {
         const selectedIds = await context.view.getSelectedRecordIdList();
-        const hasSelection = Array.isArray(selectedIds) && selectedIds.some(Boolean);
+        const hasSelection =
+          Array.isArray(selectedIds) && selectedIds.some(Boolean);
         if (!hasSelection) {
           const overlapValues = [
             parseNumber($("#overlapWidth") as JQuery<HTMLInputElement>),
@@ -261,8 +232,12 @@ export function bindUIEvents() {
             ? "Warning! 你选择了 overlap，并且没有选中具体记录。确认是否要对全部产品套用当前 overlap？"
             : "未选择任何记录，是否计算当前视图的全部记录？";
 
-          const confirmed = await showConfirmAllRecords(message);
-          if (!confirmed) {
+          const decision = await showConfirmDialog({
+            message,
+            confirmText: "确认",
+            cancelText: "取消",
+          });
+          if (decision !== "confirm") {
             return;
           }
         }
@@ -275,13 +250,23 @@ export function bindUIEvents() {
     $calculateButton.prop("disabled", true).text("计算中…");
     resetLogs();
 
-    const innerBuffer = parseNumber($("#innerBuffer") as JQuery<HTMLInputElement>);
-    const masterBuffer = parseNumber($("#masterBuffer") as JQuery<HTMLInputElement>);
+    const innerBuffer = parseNumber(
+      $("#innerBuffer") as JQuery<HTMLInputElement>
+    );
+    const masterBuffer = parseNumber(
+      $("#masterBuffer") as JQuery<HTMLInputElement>
+    );
     const bufferUnit = $("#bufferUnit").val() as BufferUnit;
     const innerMaterial = $("#innerMaterial").val() as InnerMaterial;
-    const overlapHeight = parseNumber($("#overlapHeight") as JQuery<HTMLInputElement>);
-    const overlapWidth = parseNumber($("#overlapWidth") as JQuery<HTMLInputElement>);
-    const overlapDepth = parseNumber($("#overlapDepth") as JQuery<HTMLInputElement>);
+    const overlapHeight = parseNumber(
+      $("#overlapHeight") as JQuery<HTMLInputElement>
+    );
+    const overlapWidth = parseNumber(
+      $("#overlapWidth") as JQuery<HTMLInputElement>
+    );
+    const overlapDepth = parseNumber(
+      $("#overlapDepth") as JQuery<HTMLInputElement>
+    );
     const overlapUnit = $("#overlapUnit").val() as BufferUnit;
 
     try {
@@ -309,4 +294,5 @@ export function bindUIEvents() {
   });
 
   void refreshContext({ showLoading: true });
+  initFieldTypeTools();
 }

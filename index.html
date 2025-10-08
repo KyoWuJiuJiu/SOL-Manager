@@ -113,6 +113,37 @@
         <button id="calculateButton" class="primary-button">开始计算</button>
       </section>
 
+      <section class="field-type-section">
+        <h2 class="section-title">设置字段类型</h2>
+        <p class="section-hint">先在多维表格中选中列，再点击需要的按钮完成类型设置。</p>
+        <div class="field-type-actions">
+          <button id="fieldTypeTextButton" type="button" class="secondary-button">
+            文本
+          </button>
+          <button id="fieldTypeIntegerButton" type="button" class="secondary-button">
+            整数
+          </button>
+          <button id="fieldTypeDecimal2Button" type="button" class="secondary-button">
+            小数 0.00
+          </button>
+          <button id="fieldTypeCurrencyButton" type="button" class="secondary-button">
+            货币
+          </button>
+          <button id="fieldTypeSingleSelectButton" type="button" class="secondary-button">
+            单选
+          </button>
+          <button id="fieldTypeUserButton" type="button" class="secondary-button">
+            人员
+          </button>
+          <button id="fieldTypeFormulaButton" type="button" class="secondary-button">
+            公式
+          </button>
+          <button id="fieldTypeDateButton" type="button" class="secondary-button">
+            日期
+          </button>
+        </div>
+      </section>
+
       <section class="log-section">
         <h2 class="section-title">日志</h2>
         <p id="logPlaceholder" class="log-placeholder">
@@ -124,16 +155,19 @@
 
     <div id="confirmOverlay" class="confirm-overlay" hidden>
       <div class="confirm-dialog">
-        <h3 class="confirm-title">确认计算全部记录</h3>
+        <h3 id="confirmTitle" class="confirm-title">确认计算全部记录</h3>
         <p id="confirmMessage" class="confirm-message">
           未选择任何记录，是否继续计算当前视图的全部记录？
         </p>
         <div class="confirm-actions">
-          <button id="confirmCancel" class="confirm-button">
-            取消
-          </button>
           <button id="confirmOk" class="confirm-button primary">
             确认
+          </button>
+          <button id="confirmSecondary" class="confirm-button secondary" hidden>
+            第二操作
+          </button>
+          <button id="confirmCancel" class="confirm-button">
+            取消
           </button>
         </div>
       </div>
