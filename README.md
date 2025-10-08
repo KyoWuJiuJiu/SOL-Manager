@@ -7,6 +7,7 @@ A lightweight front-end plugin for Feishu Bitable that helps SOL teams calculate
 - Calculates best-fit arrangements for inner and master cartons while respecting configurable buffer sizes.
 - Converts between centimetres and inches, estimates package weight, and writes results back to the sheet.
 - Validates required numeric fields and surfaces issues through inline logs and toast messages.
+- Provides a "设置字段类型" toolbox so you can quickly convert Bitable columns to the expected field types (文本、整数、小数、货币、单选、人员、公式、日期)。
 - Zero-backend by default, but ready to call an external service via `src/config/config.ts` when needed.
 
 ## Prerequisites
@@ -52,8 +53,15 @@ The plugin looks up fields by _display name_. Ensure the active table contains t
 1. Open the Bitable base containing the fields above.
 2. Select the view you want the plugin to act on.
 3. Launch the plugin panel (either via the development URL during testing or the hosted build in production).
-4. Set buffer sizes, choose the inner packaging material, and decide whether to target all records or only the selected ones.
-5. Click **开始计算** to update carton dimensions and review the log output for per-record results.
+4. In the **计算箱型** section，设置缓冲、材质、Overlap 等参数，可勾选“计算当前视图全部记录”或只处理已选中记录。
+5. 点击 **开始计算** 更新箱型尺寸并查看日志输出。
+6. 在 **设置字段类型** 区域，按照需要点击按钮快速调整当前选中的列：
+   - `文本` / `整数` / `小数 0.00`：支持与公式冲突时选择“保留公式 / 彻底转换 / 取消”。
+   - `货币`：一次选择币种（默认 USD）和显示格式。
+   - `单选`：自动收集现有单元格内容生成选项并写回，保留原数据。
+   - `人员`：转为单人选择字段。
+   - `公式`：转换为公式字段（默认空公式，若原本是公式则提示不重复设置）。
+   - `日期`：直接转换为短日期字段。
 
 ## Development Workflow
 - `npm run dev` – Start Vite with hot module replacement.
