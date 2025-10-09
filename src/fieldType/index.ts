@@ -332,6 +332,25 @@ export async function convertFieldToDate(
   });
 }
 
+export async function convertFieldToAttachment(
+  fieldId: string | null
+): Promise<ConversionSummary> {
+  const summary = createEmptySummary();
+  if (!fieldId) return summary;
+
+  const table = await bitable.base.getActiveTable();
+
+  try {
+    await table.setField(fieldId, { type: FieldType.Attachment });
+    summary.applied += 1;
+  } catch (error) {
+    console.warn("设置字段为附件失败", error);
+    summary.skipped += 1;
+  }
+
+  return summary;
+}
+
 async function convertFieldToNumber(
   fieldId: string | null,
   formatter: NumberFormatter,

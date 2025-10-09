@@ -4,6 +4,7 @@ import {
   convertFieldToCurrency,
   convertFieldToDate,
   convertFieldToFormula,
+  convertFieldToAttachment,
   convertFieldToSingleSelect,
   convertFieldToUser,
   convertFieldsToDecimal2,
@@ -82,6 +83,13 @@ const BUTTON_BINDINGS: ButtonBinding[] = [
         handlers
       ),
     successMessage: "字段已设置为日期",
+    pendingLabel: "设置中…",
+  },
+  {
+    selector: "#fieldTypeAttachmentButton",
+    actionLabel: "附件",
+    action: async (fieldId) => convertFieldToAttachment(fieldId),
+    successMessage: "字段已设置为附件",
     pendingLabel: "设置中…",
   },
   {
