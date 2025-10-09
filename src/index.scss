@@ -77,6 +77,20 @@ body {
   gap: 12px;
 }
 
+.view-section {
+  border-top: 2px solid #0f172a;
+  padding-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.view-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 .field-type-dialog {
   display: flex;
   flex-direction: column;

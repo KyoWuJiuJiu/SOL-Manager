@@ -8,6 +8,7 @@ A lightweight front-end plugin for Feishu Bitable that helps SOL teams calculate
 - Converts between centimetres and inches, estimates package weight, and writes results back to the sheet.
 - Validates required numeric fields and surfaces issues through inline logs and toast messages.
 - Provides a "设置字段类型" toolbox so you can quickly convert Bitable columns to the expected field types (文本、整数、小数、货币、单选、人员、公式、日期)。
+- Offers one-click buttons to generate preset views（尺寸、三段分析、Spec、关税视图），免去手动挑选列的步骤。
 - Zero-backend by default, but ready to call an external service via `src/config/config.ts` when needed.
 
 ## Prerequisites
@@ -62,6 +63,7 @@ The plugin looks up fields by _display name_. Ensure the active table contains t
    - `人员`：转为单人选择字段。
    - `公式`：转换为公式字段（默认空公式，若原本是公式则提示不重复设置）。
    - `日期`：直接转换为短日期字段。
+7. 在 **一键建立视图** 区域，选择需要的按钮（价格、尺寸、关税、Spec），系统会自动创建并显示相应字段；若同名视图已存在则会提示跳过。若希望统一筛选/分组/排序，可点击 `一键分组/排序/筛选` 同步到上述视图。
 
 ## Development Workflow
 - `npm run dev` – Start Vite with hot module replacement.

@@ -9,6 +9,7 @@ import {
 import { showError, showToast } from "../utils/logger";
 
 import { initFieldTypeTools } from "./fieldTypeTools";
+import { initViewTools } from "./viewTools";
 import { showConfirmDialog } from "./dialogue";
 
 function parseNumber($input: JQuery<HTMLInputElement>): number {
@@ -295,4 +296,5 @@ export function bindUIEvents() {
 
   void refreshContext({ showLoading: true });
   initFieldTypeTools();
+  initViewTools();
 }
