@@ -5,6 +5,7 @@ import {
   SetFilterType,
   FilterConjunction,
 } from "@lark-base-open/js-sdk";
+import { mapPermissionError } from "../utils/errors";
 import { showError, showToast } from "../utils/logger";
 import { findFieldMetaByName, type FieldMetaLike } from "../utils/field";
 
@@ -226,61 +227,69 @@ function buildFieldNameList(specific: string[]): string[] {
 }
 
 async function createView(viewName: string, fieldNames: string[]) {
-  const table = await bitable.base.getActiveTable();
-  const viewMetas = await table.getViewMetaList?.();
-  if (!Array.isArray(viewMetas)) {
-    throw new Error("无法读取视图列表");
-  }
+  try {
+    const table = await bitable.base.getActiveTable();
+    const viewMetas = await table.getViewMetaList?.();
+    if (!Array.isArray(viewMetas)) {
+      throw new Error("无法读取视图列表");
+    }
 
-  const fieldMetas = (await table.getFieldMetaList?.()) as FieldMetaLike[];
-  if (!Array.isArray(fieldMetas)) {
-    throw new Error("无法读取字段元数据");
-  }
+    const fieldMetas = (await table.getFieldMetaList?.()) as FieldMetaLike[];
+    if (!Array.isArray(fieldMetas)) {
+      throw new Error("无法读取字段元数据");
+    }
 
-  const resolvedFieldIds: string[] = [];
-  const missingFields: string[] = [];
-  resolveFieldIds(fieldNames, fieldMetas, resolvedFieldIds, missingFields);
-  if (!resolvedFieldIds.length) {
-    throw new Error("未找到任何匹配到的字段，无法配置视图");
-  }
+    const resolvedFieldIds: string[] = [];
+    const missingFields: string[] = [];
+    resolveFieldIds(fieldNames, fieldMetas, resolvedFieldIds, missingFields);
+    if (!resolvedFieldIds.length) {
+      throw new Error("未找到任何匹配到的字段，无法配置视图");
+    }
 
-  const existing = viewMetas.find(
-    (meta: any) => (meta?.name ?? "").trim() === viewName
-  );
-
-  let viewId: string | undefined;
-  if (existing?.id) {
-    viewId = existing.id;
-  } else {
-    const { viewId: newId } = await table.addView({
-      type: ViewType.Grid,
-      name: viewName,
-    });
-    viewId = newId;
-  }
-
-  const view =
-    (await table.getViewById?.(viewId)) ?? (await table.getView?.(viewId));
-  if (!view) {
-    throw new Error("无法获取视图对象");
-  }
-
-  const allFieldIds = fieldMetas
-    .map((meta) => meta.id)
-    .filter((id): id is string => Boolean(id));
-  const desiredSet = new Set(resolvedFieldIds);
-  const hiddenIds = allFieldIds.filter((id) => !desiredSet.has(id));
-  if (hiddenIds.length) {
-    await view.hideField(hiddenIds);
-  }
-  await view.showField(resolvedFieldIds);
-  await view.applySetting?.();
-
-  if (missingFields.length) {
-    showToast(
-      `视图“${viewName}”已更新，但以下字段未找到：${missingFields.join(", ")}`,
-      "warning"
+    const existing = viewMetas.find(
+      (meta: any) => (meta?.name ?? "").trim() === viewName
     );
+
+    let viewId: string | undefined;
+    if (existing?.id) {
+      viewId = existing.id;
+    } else {
+      const { viewId: newId } = await table.addView({
+        type: ViewType.Grid,
+        name: viewName,
+      });
+      viewId = newId;
+    }
+
+    const view =
+      (await table.getViewById?.(viewId)) ?? (await table.getView?.(viewId));
+    if (!view) {
+      throw new Error("无法获取视图对象");
+    }
+
+    const allFieldIds = fieldMetas
+      .map((meta) => meta.id)
+      .filter((id): id is string => Boolean(id));
+    const desiredSet = new Set(resolvedFieldIds);
+    const hiddenIds = allFieldIds.filter((id) => !desiredSet.has(id));
+    if (hiddenIds.length) {
+      await view.hideField(hiddenIds);
+    }
+    await view.showField(resolvedFieldIds);
+    await view.applySetting?.();
+
+    if (missingFields.length) {
+      showToast(
+        `视图“${viewName}”已更新，但以下字段未找到：${missingFields.join(", ")}`,
+        "warning"
+      );
+    }
+  } catch (error) {
+    const friendly = mapPermissionError(error);
+    if (friendly) {
+      throw friendly;
+    }
+    throw error;
   }
 }
 
@@ -307,58 +316,66 @@ const REFERENCE_VIEW_NAME = "价格";
 const TARGET_VIEW_NAMES = ["价格", "尺寸", "关税", "Spec"];
 
 async function syncViewsFromReference() {
-  const table = await bitable.base.getActiveTable();
-  const viewMetas = await table.getViewMetaList?.();
-  if (!Array.isArray(viewMetas)) {
-    throw new Error("无法读取视图列表");
-  }
-
-  const lookup = new Map<string, { id: string; name: string }>();
-  for (const meta of viewMetas) {
-    const name = (meta?.name ?? "").trim();
-    const id = meta?.id;
-    if (!name || !id) continue;
-    lookup.set(name, { id, name });
-  }
-
-  const reference = lookup.get(REFERENCE_VIEW_NAME);
-  if (!reference) {
-    throw new Error(`未找到名为“${REFERENCE_VIEW_NAME}”的视图，请先创建该视图`);
-  }
-
-  const referenceView =
-    (await table.getViewById?.(reference.id)) ??
-    (await table.getView?.(reference.id));
-  if (!referenceView) {
-    throw new Error("无法获取参考视图对象");
-  }
-
-  const [filterInfo, sortInfo, groupInfo] = await Promise.all([
-    referenceView.getFilterInfo?.() ?? null,
-    referenceView.getSortInfo?.() ?? null,
-    referenceView.getGroupInfo?.() ?? null,
-  ]);
-
-  const targetNames = TARGET_VIEW_NAMES.filter((name) => lookup.has(name));
-  if (!targetNames.length) {
-    throw new Error("未找到任何可同步的目标视图");
-  }
-
-  for (const name of targetNames) {
-    const meta = lookup.get(name);
-    if (!meta) continue;
-    const view =
-      (await table.getViewById?.(meta.id)) ?? (await table.getView?.(meta.id));
-    if (!view) continue;
-
-    await syncFilter(view, filterInfo);
-    if (typeof view.setSortInfo === "function") {
-      await view.setSortInfo(Array.isArray(sortInfo) ? sortInfo : []);
+  try {
+    const table = await bitable.base.getActiveTable();
+    const viewMetas = await table.getViewMetaList?.();
+    if (!Array.isArray(viewMetas)) {
+      throw new Error("无法读取视图列表");
     }
-    if (typeof view.setGroupInfo === "function") {
-      await view.setGroupInfo(Array.isArray(groupInfo) ? groupInfo : []);
+
+    const lookup = new Map<string, { id: string; name: string }>();
+    for (const meta of viewMetas) {
+      const name = (meta?.name ?? "").trim();
+      const id = meta?.id;
+      if (!name || !id) continue;
+      lookup.set(name, { id, name });
     }
-    await view.applySetting?.();
+
+    const reference = lookup.get(REFERENCE_VIEW_NAME);
+    if (!reference) {
+      throw new Error(`未找到名为“${REFERENCE_VIEW_NAME}”的视图，请先创建该视图`);
+    }
+
+    const referenceView =
+      (await table.getViewById?.(reference.id)) ??
+      (await table.getView?.(reference.id));
+    if (!referenceView) {
+      throw new Error("无法获取参考视图对象");
+    }
+
+    const [filterInfo, sortInfo, groupInfo] = await Promise.all([
+      referenceView.getFilterInfo?.() ?? null,
+      referenceView.getSortInfo?.() ?? null,
+      referenceView.getGroupInfo?.() ?? null,
+    ]);
+
+    const targetNames = TARGET_VIEW_NAMES.filter((name) => lookup.has(name));
+    if (!targetNames.length) {
+      throw new Error("未找到任何可同步的目标视图");
+    }
+
+    for (const name of targetNames) {
+      const meta = lookup.get(name);
+      if (!meta) continue;
+      const view =
+        (await table.getViewById?.(meta.id)) ?? (await table.getView?.(meta.id));
+      if (!view) continue;
+
+      await syncFilter(view, filterInfo);
+      if (typeof view.setSortInfo === "function") {
+        await view.setSortInfo(Array.isArray(sortInfo) ? sortInfo : []);
+      }
+      if (typeof view.setGroupInfo === "function") {
+        await view.setGroupInfo(Array.isArray(groupInfo) ? groupInfo : []);
+      }
+      await view.applySetting?.();
+    }
+  } catch (error) {
+    const friendly = mapPermissionError(error);
+    if (friendly) {
+      throw friendly;
+    }
+    throw error;
   }
 }
 
@@ -370,13 +387,29 @@ async function syncFilter(view: any, filterInfo: any) {
     for (const condition of existing.conditions) {
       const conditionId = (condition as { conditionId?: string }).conditionId;
       if (!conditionId) continue;
-      await view.setFilter(SetFilterType.DeleteCondition, conditionId);
+      try {
+        await view.setFilter(SetFilterType.DeleteCondition, conditionId);
+      } catch (error) {
+        const friendly = mapPermissionError(error);
+        if (friendly) {
+          throw friendly;
+        }
+        throw error;
+      }
     }
   }
 
   if (!filterInfo?.conditions?.length) {
     if (filterInfo?.conjunction && view.setFilterConjunction) {
-      await view.setFilterConjunction(filterInfo.conjunction);
+        try {
+          await view.setFilterConjunction(filterInfo.conjunction);
+        } catch (error) {
+          const friendly = mapPermissionError(error);
+          if (friendly) {
+            throw friendly;
+          }
+          throw error;
+        }
     }
     return;
   }
@@ -384,11 +417,27 @@ async function syncFilter(view: any, filterInfo: any) {
   const conditions = filterInfo.conditions as Array<Record<string, unknown>>;
   for (const condition of conditions) {
     const { conditionId: _omit, ...rest } = condition;
-    await view.setFilter(SetFilterType.AddCondition, rest);
+    try {
+      await view.setFilter(SetFilterType.AddCondition, rest);
+    } catch (error) {
+      const friendly = mapPermissionError(error);
+      if (friendly) {
+        throw friendly;
+      }
+      throw error;
+    }
   }
 
   const conjunction = filterInfo.conjunction ?? FilterConjunction.And;
   if (view.setFilterConjunction) {
-    await view.setFilterConjunction(conjunction);
+    try {
+      await view.setFilterConjunction(conjunction);
+    } catch (error) {
+      const friendly = mapPermissionError(error);
+      if (friendly) {
+        throw friendly;
+      }
+      throw error;
+    }
   }
 }

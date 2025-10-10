@@ -6,6 +6,7 @@ import {
   NumberFormatter,
   SelectOptionsType,
 } from "@lark-base-open/js-sdk";
+import { mapPermissionError } from "../utils/errors";
 
 const FORMULA_OUTPUT_TEXT = 201;
 const FORMULA_OUTPUT_NUMBER = 202;
@@ -168,6 +169,10 @@ export async function convertFieldToSingleSelect(
       summary.applied += 1;
       await delay(50);
     } catch (error) {
+      const friendly = mapPermissionError(error);
+      if (friendly) {
+        throw friendly;
+      }
       console.warn("切换字段为单选类型失败", error);
       summary.skipped += 1;
       return summary;
@@ -318,6 +323,10 @@ export async function convertFieldToDate(
       });
       summary.applied += 1;
     } catch (error) {
+      const friendly = mapPermissionError(error);
+      if (friendly) {
+        throw friendly;
+      }
       console.warn("设置字段为日期失败", error);
       summary.skipped += 1;
     }
@@ -344,6 +353,10 @@ export async function convertFieldToAttachment(
     await table.setField(fieldId, { type: FieldType.Attachment });
     summary.applied += 1;
   } catch (error) {
+    const friendly = mapPermissionError(error);
+    if (friendly) {
+      throw friendly;
+    }
     console.warn("设置字段为附件失败", error);
     summary.skipped += 1;
   }
@@ -388,6 +401,10 @@ async function convertFieldToNumber(
     try {
       await table.setField(fieldId, { type: FieldType.Number });
     } catch (error) {
+      const friendly = mapPermissionError(error);
+      if (friendly) {
+        throw friendly;
+      }
       console.warn("切换字段为数字类型失败", fieldId, error);
       summary.skipped += 1;
       return summary;
@@ -461,6 +478,10 @@ async function convertFieldWithConfig(
     await table.setField(fieldId, payload);
     summary.applied += 1;
   } catch (error) {
+    const friendly = mapPermissionError(error);
+    if (friendly) {
+      throw friendly;
+    }
     console.warn("设置字段类型失败", error);
     summary.skipped += 1;
     return summary;
@@ -513,10 +534,18 @@ async function applyFormatterToFormula(
     };
   }
 
-  await table.setField(fieldId, {
-    type: FieldType.Formula,
-    property,
-  });
+  try {
+    await table.setField(fieldId, {
+      type: FieldType.Formula,
+      property,
+    });
+  } catch (error) {
+    const friendly = mapPermissionError(error);
+    if (friendly) {
+      throw friendly;
+    }
+    throw error;
+  }
 }
 
 async function applyTextOutputToFormula(
