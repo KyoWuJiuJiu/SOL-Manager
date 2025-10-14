@@ -16,6 +16,7 @@ interface ViewButtonConfig {
   successMessage: string;
   pendingLabel?: string;
   customAction?: () => Promise<void>;
+  includeSubstrings?: string[];
 }
 
 const PUBLIC_FIELD_NAMES: string[] = [
@@ -62,6 +63,7 @@ const VIEW_BUTTONS: ViewButtonConfig[] = [
     ]),
     successMessage: "已创建/更新“价格”视图",
     pendingLabel: "创建中…",
+    includeSubstrings: ["TX"],
   },
   {
     selector: "#viewDimensionsButton",
@@ -190,7 +192,7 @@ function bindViewButton(
         await config.customAction();
         showToast(config.successMessage, "success");
       } else {
-        await createView(config.viewName, config.fieldNames);
+        await createOrUpdateView(config);
         showToast(config.successMessage, "success");
       }
     } catch (error) {
@@ -226,7 +228,7 @@ function buildFieldNameList(specific: string[]): string[] {
   return ordered;
 }
 
-async function createView(viewName: string, fieldNames: string[]) {
+async function createOrUpdateView(config: ViewButtonConfig) {
   try {
     const table = await bitable.base.getActiveTable();
     const viewMetas = await table.getViewMetaList?.();
@@ -241,13 +243,33 @@ async function createView(viewName: string, fieldNames: string[]) {
 
     const resolvedFieldIds: string[] = [];
     const missingFields: string[] = [];
+
+    const fieldNames = [...config.fieldNames];
+
+    if (Array.isArray(config.includeSubstrings) && config.includeSubstrings.length) {
+      const seen = new Set(fieldNames.map((name) => name.trim()).filter(Boolean));
+      for (const meta of fieldMetas) {
+        const name = meta?.name;
+        if (!name) continue;
+        const trimmed = name.trim();
+        if (!trimmed || seen.has(trimmed)) continue;
+        const match = config.includeSubstrings.some((sub) =>
+          trimmed.includes(sub)
+        );
+        if (match) {
+          seen.add(trimmed);
+          fieldNames.push(trimmed);
+        }
+      }
+    }
+
     resolveFieldIds(fieldNames, fieldMetas, resolvedFieldIds, missingFields);
     if (!resolvedFieldIds.length) {
       throw new Error("未找到任何匹配到的字段，无法配置视图");
     }
 
     const existing = viewMetas.find(
-      (meta: any) => (meta?.name ?? "").trim() === viewName
+      (meta: any) => (meta?.name ?? "").trim() === config.viewName
     );
 
     let viewId: string | undefined;
@@ -256,7 +278,7 @@ async function createView(viewName: string, fieldNames: string[]) {
     } else {
       const { viewId: newId } = await table.addView({
         type: ViewType.Grid,
-        name: viewName,
+        name: config.viewName,
       });
       viewId = newId;
     }
@@ -280,7 +302,7 @@ async function createView(viewName: string, fieldNames: string[]) {
 
     if (missingFields.length) {
       showToast(
-        `视图“${viewName}”已更新，但以下字段未找到：${missingFields.join(", ")}`,
+        `视图“${config.viewName}”已更新，但以下字段未找到：${missingFields.join(", ")}`,
         "warning"
       );
     }
