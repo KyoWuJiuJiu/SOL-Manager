@@ -70,13 +70,21 @@ export function computeBestArrangement(
   if (!triples.length) return null;
 
   const MAX_DIM_INCH = 21;
+  const clampOverlap = (value: number | undefined, limit: number) => {
+    if (!Number.isFinite(value)) return 0;
+    return Math.min(value as number, Math.max(limit, 0));
+  };
 
   let best: ArrangementResult | null = null;
   for (const counts of triples) {
     const [countW, countD, countH] = counts;
-    const overlapWidth = overlap?.width ?? 0;
-    const overlapDepth = overlap?.depth ?? 0;
-    const overlapHeight = overlap?.height ?? 0;
+    const overlapWidth = clampOverlap(overlap?.width, dims.width);
+    const overlapDepth = clampOverlap(overlap?.depth, dims.depth);
+    const overlapHeight = clampOverlap(overlap?.height, dims.height);
+
+    if (countW > 1 && overlapWidth >= dims.width) continue;
+    if (countD > 1 && overlapDepth >= dims.depth) continue;
+    if (countH > 1 && overlapHeight >= dims.height) continue;
 
     const netWidth = countW * dims.width - overlapWidth * Math.max(countW - 1, 0);
     const netDepth = countD * dims.depth - overlapDepth * Math.max(countD - 1, 0);
