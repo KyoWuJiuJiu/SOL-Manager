@@ -4,8 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SOL Carton Size Helper</title>
-    <script type="module" crossorigin src="./assets/index-Dxk_XjYQ.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-DqYbNnMS.css">
+    <script type="module" crossorigin src="./assets/index-DU6FDOQD.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DU3QmoC6.css">
   </head>
   <body>
     <div class="app-shell">
@@ -113,6 +113,46 @@
         </label>
 
         <button id="calculateButton" class="primary-button">开始计算</button>
+        <div class="cdu-control">
+          <div class="cdu-counts">
+            <label class="cdu-field">
+              <span class="cdu-label">宽</span>
+              <input
+                id="cduWidthCount"
+                type="number"
+                min="0"
+                step="1"
+                class="number-input"
+                placeholder="0"
+              />
+            </label>
+            <label class="cdu-field">
+              <span class="cdu-label">深</span>
+              <input
+                id="cduDepthCount"
+                type="number"
+                min="0"
+                step="1"
+                class="number-input"
+                placeholder="0"
+              />
+            </label>
+            <label class="cdu-field">
+              <span class="cdu-label">高</span>
+              <input
+                id="cduHeightCount"
+                type="number"
+                min="0"
+                step="1"
+                class="number-input"
+                placeholder="0"
+              />
+            </label>
+          </div>
+          <button id="calculateCduButton" type="button" class="primary-button secondary">
+            计算CDU
+          </button>
+        </div>
       </section>
 
       <section class="field-type-section">

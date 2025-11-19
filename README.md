@@ -65,6 +65,7 @@ The plugin looks up fields by _display name_. Ensure the active table contains t
    - `日期`：直接转换为短日期字段。
    - `附件`：直接转换为附件字段（遇到公式字段也会强制转换）。
 7. 在 **一键建立视图** 区域，选择需要的按钮（价格、尺寸、关税、Spec），系统会自动创建并显示相应字段；若同名视图已存在则会提示跳过。若希望统一筛选/分组/排序，可点击 `一键分组/排序/筛选` 同步到上述视图。
+8. 若需要根据指定排布计算 CDU（展示盒）尺寸，可在 **箱型** 板块点击 `计算CDU`：输入宽/深/高的件数，程序会校验与 Master Qty 是否一致，并按照“CDU 尺寸 + Master Buffer + 当前 Overlap”的规则写入外箱尺寸，同时在日志中输出 CDU 尺寸。该功能仅对当前手动选中的记录生效（不会对整个视图一次性计算）。
 
 ## Development Workflow
 - `npm run dev` – Start Vite with hot module replacement.

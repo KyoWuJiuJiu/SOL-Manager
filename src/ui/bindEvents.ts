@@ -3,6 +3,7 @@ import { bitable } from "@lark-base-open/js-sdk";
 import { loadPluginContext, type PluginContext } from "../core/context";
 import {
   runCalculation,
+  runCduCalculation,
   type BufferUnit,
   type InnerMaterial,
 } from "../core/calculator";
@@ -41,9 +42,14 @@ export function bindUIEvents() {
   const $calculateButton = $("#calculateButton");
   const $controls = $(".controls");
   const $overlapReset = $("#overlapReset");
+  const $calculateCduButton = $("#calculateCduButton");
+  const $cduWidthCount = $("#cduWidthCount") as JQuery<HTMLInputElement>;
+  const $cduDepthCount = $("#cduDepthCount") as JQuery<HTMLInputElement>;
+  const $cduHeightCount = $("#cduHeightCount") as JQuery<HTMLInputElement>;
   let context: PluginContext | null = null;
   let missingFields: string[] = [];
   let busy = false;
+  let cduBusy = false;
   let listenersRegistered = false;
   let refreshScheduled = false;
   let tableListenerDisposers: Array<() => void> = [];
@@ -269,7 +275,6 @@ export function bindUIEvents() {
       $("#overlapDepth") as JQuery<HTMLInputElement>
     );
     const overlapUnit = $("#overlapUnit").val() as BufferUnit;
-
     try {
       await runCalculation(context, {
         forceAll,
@@ -291,6 +296,77 @@ export function bindUIEvents() {
     } finally {
       busy = false;
       $calculateButton.prop("disabled", false).text("开始计算");
+    }
+  });
+
+  $calculateCduButton.on("click", async () => {
+    if (!context) {
+      showError("插件尚未准备就绪，稍后再试。");
+      return;
+    }
+    if (cduBusy) return;
+    const widthCount = Math.floor(parseNumber($cduWidthCount));
+    const depthCount = Math.floor(parseNumber($cduDepthCount));
+    const heightCount = Math.floor(parseNumber($cduHeightCount));
+    if (widthCount <= 0 || depthCount <= 0 || heightCount <= 0) {
+      showError("请填写 CDU 的宽/深/高个数。");
+      return;
+    }
+
+    let recordIds: string[] = [];
+    try {
+      const selected = await context.view.getSelectedRecordIdList();
+      recordIds = Array.isArray(selected)
+        ? selected.filter((id): id is string => Boolean(id))
+        : [];
+    } catch (error) {
+      console.warn("获取选中记录失败", error);
+    }
+
+    if (!recordIds.length) {
+      showError("CDU 计算只支持已选定的记录，请先选中需要处理的行。");
+      return;
+    }
+
+    const overlapHeight = parseNumber(
+      $("#overlapHeight") as JQuery<HTMLInputElement>
+    );
+    const overlapWidth = parseNumber(
+      $("#overlapWidth") as JQuery<HTMLInputElement>
+    );
+    const overlapDepth = parseNumber(
+      $("#overlapDepth") as JQuery<HTMLInputElement>
+    );
+    const overlapUnit = $("#overlapUnit").val() as BufferUnit;
+    const masterBuffer = parseNumber(
+      $("#masterBuffer") as JQuery<HTMLInputElement>
+    );
+    const bufferUnit = $("#bufferUnit").val() as BufferUnit;
+
+    try {
+      cduBusy = true;
+      $calculateCduButton.prop("disabled", true).text("计算中…");
+      resetLogs();
+      await runCduCalculation(context, {
+        recordIds,
+        widthCount,
+        depthCount,
+        heightCount,
+        masterBuffer,
+        masterBufferUnit: bufferUnit,
+        overlapWidth,
+        overlapDepth,
+        overlapHeight,
+        overlapUnit,
+        onLog: withLogs,
+      });
+      showToast("CDU 计算完成", "success");
+    } catch (error) {
+      const message = (error as Error).message ?? "CDU 计算失败";
+      showError(message);
+    } finally {
+      cduBusy = false;
+      $calculateCduButton.prop("disabled", false).text("计算CDU");
     }
   });
 

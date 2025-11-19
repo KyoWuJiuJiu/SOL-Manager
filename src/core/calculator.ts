@@ -1,10 +1,11 @@
-import { bitable, ToastType } from "@lark-base-open/js-sdk";
+import { bitable, FieldType, ToastType } from "@lark-base-open/js-sdk";
 import type { PluginContext } from "./context";
 import type { FieldIds, FieldKey, OptionalFieldKey } from "../config/fields";
 import { FIELD_KEYS, OPTIONAL_FIELD_KEYS } from "../config/fields";
 import { computeBestArrangement, type ArrangementResult } from "./arrangement";
 import { convertBufferToInches, extractNumber, round } from "../utils/numbers";
 import { logError } from "../utils/logger";
+import { mapPermissionError } from "../utils/errors";
 
 export type BufferUnit = "inch" | "cm";
 export type InnerMaterial = "Box" | "Poly Bag";
@@ -12,6 +13,7 @@ export type InnerMaterial = "Box" | "Poly Bag";
 const INNER_BOX_PACKAGING_WEIGHT_G = 100;
 const GRAM_TO_POUND = 0.00220462;
 const LB_TO_KG = 0.4536;
+const CDU_BUFFER_CM = 0.5;
 const INNER_FIELD_KEYS = [
   "innerWidth",
   "innerDepth",
@@ -30,6 +32,20 @@ export interface CalculationOptions {
   overlapHeight: number;
   overlapWidth: number;
   overlapDepth: number;
+  overlapUnit: BufferUnit;
+  onLog: (message: string) => void;
+}
+
+export interface CduCalculationOptions {
+  recordIds: string[];
+  widthCount: number;
+  depthCount: number;
+  heightCount: number;
+  masterBuffer: number;
+  masterBufferUnit: BufferUnit;
+  overlapWidth: number;
+  overlapDepth: number;
+  overlapHeight: number;
   overlapUnit: BufferUnit;
   onLog: (message: string) => void;
 }
@@ -525,4 +541,214 @@ export async function runCalculation(
   }
 
   onLog(`已完成 ${processed}/${recordIds.length} 条记录计算。`);
+}
+
+export async function runCduCalculation(
+  context: PluginContext,
+  options: CduCalculationOptions
+): Promise<void> {
+  const {
+    recordIds,
+    widthCount,
+    depthCount,
+    heightCount,
+    masterBuffer,
+    masterBufferUnit,
+    overlapWidth,
+    overlapDepth,
+    overlapHeight,
+    overlapUnit,
+    onLog,
+  } = options;
+  const { table, fieldIds, fieldMetaMap } = context;
+
+  if (!recordIds.length) {
+    onLog("未找到可计算的记录。");
+    return;
+  }
+
+  const counts = {
+    width: Math.floor(widthCount),
+    depth: Math.floor(depthCount),
+    height: Math.floor(heightCount),
+  };
+
+  if (counts.width <= 0 || counts.depth <= 0 || counts.height <= 0) {
+    throw new Error("请输入 CDU 的宽/深/高个数。");
+  }
+
+  const overlapWidthInches = convertBufferToInches(overlapWidth, overlapUnit);
+  const overlapDepthInches = convertBufferToInches(overlapDepth, overlapUnit);
+  const overlapHeightInches = convertBufferToInches(overlapHeight, overlapUnit);
+  const masterBufferInches = convertBufferToInches(
+    masterBuffer,
+    masterBufferUnit
+  );
+  const cduBufferInches = convertBufferToInches(CDU_BUFFER_CM, "cm");
+
+  const getFieldDisplayName = (key: keyof FieldIds): string => {
+    if ((FIELD_KEYS as Record<string, { name: string }>)[key as FieldKey]) {
+      return FIELD_KEYS[key as FieldKey].name;
+    }
+    if (
+      (OPTIONAL_FIELD_KEYS as Record<string, { name: string }>)[
+        key as OptionalFieldKey
+      ]
+    ) {
+      return OPTIONAL_FIELD_KEYS[key as OptionalFieldKey].name;
+    }
+    return key;
+  };
+
+  const canWriteField = (key: keyof FieldIds): boolean => {
+    if (!fieldIds[key]) return false;
+    const meta = fieldMetaMap?.[key];
+    if (!meta || meta.type == null) return true;
+    return meta.type === FieldType.Number;
+  };
+
+  for (const [index, recordId] of recordIds.entries()) {
+    let label = formatRecordLabel(recordId, index, null);
+    try {
+      const record = await table.getRecordById(recordId);
+
+      const fetchValue = (key: keyof FieldIds): number | null => {
+        const fieldId = fieldIds[key];
+        if (!fieldId) return null;
+        const cellValue = record.fields[fieldId];
+        return extractNumber(cellValue);
+      };
+
+      const fetchText = (key: keyof FieldIds): string | null => {
+        const fieldId = fieldIds[key];
+        if (!fieldId) return null;
+        const cellValue = record.fields[fieldId];
+        if (Array.isArray(cellValue) && cellValue.length) {
+          const first = cellValue[0];
+          if (typeof first === "object" && first) {
+            const candidate =
+              typeof (first as { text?: unknown }).text === "string"
+                ? (first as { text?: unknown }).text
+                : typeof (first as { value?: unknown }).value === "string"
+                ? (first as { value?: unknown }).value
+                : null;
+            if (candidate != null) {
+              return extractTextValue(candidate);
+            }
+          }
+          if (
+            typeof first === "string" ||
+            (typeof first === "number" && Number.isFinite(first))
+          ) {
+            return extractTextValue(first);
+          }
+        }
+        return extractTextValue(cellValue);
+      };
+
+      const rawItemCode = fieldIds.itemCode ? fetchText("itemCode") : null;
+      label = formatRecordLabel(recordId, index, rawItemCode);
+
+      const itemWidth = fetchValue("itemWidth");
+      const itemDepth = fetchValue("itemDepth");
+      const itemHeight = fetchValue("itemHeight");
+      const masterQty = fetchValue("masterQty");
+
+      if (
+        !isPositive(itemWidth) ||
+        !isPositive(itemDepth) ||
+        !isPositive(itemHeight)
+      ) {
+        onLog(`${label} 未填写完整的产品尺寸，CDU 计算已跳过。`);
+        continue;
+      }
+
+      if (!Number.isInteger(masterQty) || !masterQty) {
+        onLog(`${label} Master Qty 无效，CDU 计算已跳过。`);
+        continue;
+      }
+
+      const expected = counts.width * counts.depth * counts.height;
+      if (expected !== masterQty) {
+        onLog(
+          `${label} CDU 个数 (${counts.width}×${counts.depth}×${counts.height}=${expected}) 与 Master Qty (${masterQty}) 不匹配，已跳过。`
+        );
+        continue;
+      }
+
+      const cduWidth =
+        counts.width * (itemWidth as number) + cduBufferInches;
+      const cduDepth =
+        counts.depth * (itemDepth as number) + cduBufferInches;
+      const cduHeight =
+        counts.height * (itemHeight as number) + cduBufferInches;
+
+      const outerWidth = cduWidth + overlapWidthInches + masterBufferInches;
+      const outerDepth = cduDepth + overlapDepthInches + masterBufferInches;
+      const outerHeight = cduHeight + overlapHeightInches + masterBufferInches;
+
+      const updates: Promise<unknown>[] = [];
+      const skippedFields = new Set<string>();
+
+      const setValue = (
+        key: keyof FieldIds,
+        value: number | null
+      ): boolean => {
+        const fieldId = fieldIds[key];
+        if (!fieldId) return false;
+        if (!canWriteField(key)) {
+          const name = getFieldDisplayName(key);
+          if (!skippedFields.has(name)) {
+            onLog(`${label} 字段 ${name} 为公式字段，已跳过写入。`);
+            skippedFields.add(name);
+          }
+          return false;
+        }
+        updates.push(
+          (async () => {
+            try {
+              await table.setCellValue(
+                fieldId,
+                recordId,
+                value != null ? round(value, 3) : null
+              );
+            } catch (error) {
+              const friendly = mapPermissionError(error);
+              if (friendly) {
+                throw friendly;
+              }
+              throw error;
+            }
+          })()
+        );
+        return true;
+      };
+
+      setValue("masterWidth", outerWidth);
+      setValue("masterDepth", outerDepth);
+      setValue("masterHeight", outerHeight);
+
+      if (updates.length) {
+        await Promise.all(updates);
+      }
+
+      onLog(
+        `${label} CDU 尺寸：${round(cduWidth, 2).toFixed(2)} × ${round(
+          cduDepth,
+          2
+        ).toFixed(2)} × ${round(cduHeight, 2).toFixed(2)} (in)。`
+      );
+      onLog(
+        `${label} 外箱尺寸更新（CDU）：${round(outerWidth, 2).toFixed(
+          2
+        )} × ${round(outerDepth, 2).toFixed(2)} × ${round(
+          outerHeight,
+          2
+        ).toFixed(2)} (in)。`
+      );
+    } catch (error) {
+      logError("cdu-calc", error);
+      onLog(`${label} CDU 计算失败：${(error as Error).message ?? "未知错误"}`);
+    }
+  }
 }
